@@ -7,11 +7,15 @@ internal sealed class SerialCaptureService
 {
     private readonly AppOptions _options;
     private readonly ILineSink _sink;
+    private readonly Action<string>? _onData;
+    private readonly Action<string>? _onStatus;
 
-    public SerialCaptureService(AppOptions options, ILineSink sink)
+    public SerialCaptureService(AppOptions options, ILineSink sink, Action<string>? onData = null, Action<string>? onStatus = null)
     {
         _options = options;
         _sink = sink;
+        _onData = onData;
+        _onStatus = onStatus;
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -23,7 +27,7 @@ internal sealed class SerialCaptureService
             try
             {
                 port.Open();
-                Console.WriteLine($"Connected: {_options.Port} @ {_options.Baud} baud");
+                _onStatus?.Invoke($"Connected: {_options.Port} @ {_options.Baud} baud");
 
                 while (!cancellationToken.IsCancellationRequested)
                 {
@@ -32,7 +36,7 @@ internal sealed class SerialCaptureService
                     {
                         var ts = DateTimeOffset.UtcNow;
                         _sink.Write(ts, chunk);
-                        Console.Write(chunk);
+                        _onData?.Invoke(chunk);
                     }
                     else
                     {
@@ -46,7 +50,7 @@ internal sealed class SerialCaptureService
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Serial error: {ex.Message}");
+                _onStatus?.Invoke($"Serial error: {ex.Message}");
                 if (!_options.Reconnect)
                     throw;
             }
@@ -61,7 +65,7 @@ internal sealed class SerialCaptureService
             if (!_options.Reconnect || cancellationToken.IsCancellationRequested)
                 break;
 
-            Console.WriteLine($"Reconnecting in {_options.ReconnectDelayMs}ms...");
+            _onStatus?.Invoke($"Reconnecting in {_options.ReconnectDelayMs}ms...");
             await Task.Delay(_options.ReconnectDelayMs, cancellationToken);
         }
     }
