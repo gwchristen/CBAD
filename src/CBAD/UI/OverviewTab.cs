@@ -39,53 +39,47 @@ internal sealed class OverviewTab : UserControl
     private sealed class StationPanel : Panel
     {
         private readonly Label _header;
-        private readonly Label _batteryId;
         private readonly Label _statusDot;
         private readonly Label _statusText;
-        private readonly Label _lastSeen;
         private readonly Label _capacity;
         private readonly Label _health;
-        private readonly Label _cycles;
-        private readonly Label _value;
 
         public StationPanel(int station)
         {
             Dock = DockStyle.Fill;
             BorderStyle = BorderStyle.FixedSingle;
-            Padding = new Padding(8);
+            Padding = new Padding(12);
 
             _header = new Label
             {
                 Text = $"Station {station}",
                 Font = new System.Drawing.Font(Font.FontFamily, 11, System.Drawing.FontStyle.Bold),
                 AutoSize = true,
-                Margin = new Padding(0, 0, 0, 4)
+                Margin = new Padding(0, 0, 0, 8)
             };
 
-            _batteryId = new Label { AutoSize = true, ForeColor = System.Drawing.Color.Gray };
             _statusDot = new Label
             {
                 AutoSize = false,
                 Width = 16,
                 Height = 16,
-                BackColor = System.Drawing.Color.LightGray
+                BackColor = System.Drawing.Color.LightGray,
+                Margin = new Padding(0, 2, 6, 0)
             };
             _statusText = new Label { AutoSize = true };
-            _lastSeen = new Label { AutoSize = true, ForeColor = System.Drawing.Color.DimGray };
-            _capacity = new Label { AutoSize = true };
-            _health = new Label { AutoSize = true };
-            _cycles = new Label { AutoSize = true };
-            _value = new Label { AutoSize = true, ForeColor = System.Drawing.Color.DimGray };
 
             var statusRow = new FlowLayoutPanel
             {
                 AutoSize = true,
                 FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = false
+                WrapContents = false,
+                Margin = new Padding(0, 0, 0, 6)
             };
-            _statusDot.Margin = new Padding(0, 2, 4, 0);
             statusRow.Controls.Add(_statusDot);
             statusRow.Controls.Add(_statusText);
+
+            _capacity = new Label { AutoSize = true, Margin = new Padding(0, 4, 0, 2) };
+            _health    = new Label { AutoSize = true, Margin = new Padding(0, 2, 0, 0) };
 
             var layout = new FlowLayoutPanel
             {
@@ -95,46 +89,26 @@ internal sealed class OverviewTab : UserControl
                 AutoScroll = true
             };
             layout.Controls.Add(_header);
-            layout.Controls.Add(_batteryId);
             layout.Controls.Add(statusRow);
-            layout.Controls.Add(_lastSeen);
             layout.Controls.Add(_capacity);
             layout.Controls.Add(_health);
-            layout.Controls.Add(_cycles);
-            layout.Controls.Add(_value);
 
             Controls.Add(layout);
-
             ResetToNoData();
         }
 
         private void ResetToNoData()
         {
-            _batteryId.Text = "(no data)";
-            _batteryId.ForeColor = System.Drawing.Color.Gray;
             _statusDot.BackColor = System.Drawing.Color.LightGray;
             _statusText.Text = "—";
-            _lastSeen.Text = string.Empty;
-            _capacity.Text = string.Empty;
-            _health.Text = string.Empty;
-            _cycles.Text = string.Empty;
-            _value.Text = string.Empty;
+            _capacity.Text = "Capacity: —";
+            _health.Text   = "Health: —";
         }
 
         public void Update(StationState state)
         {
             var rec = state.Latest;
-            if (rec is null)
-            {
-                ResetToNoData();
-                return;
-            }
-
-            var bid = string.IsNullOrWhiteSpace(rec.BatteryId) ? "(no label)" : rec.BatteryId;
-            _batteryId.Text = bid;
-            _batteryId.ForeColor = string.IsNullOrWhiteSpace(rec.BatteryId)
-                ? System.Drawing.Color.Gray
-                : System.Drawing.Color.Black;
+            if (rec is null) { ResetToNoData(); return; }
 
             _statusDot.BackColor = string.IsNullOrEmpty(rec.StatusCode)
                 ? System.Drawing.Color.LightGray
@@ -144,12 +118,8 @@ internal sealed class OverviewTab : UserControl
                 ? "—"
                 : CadexStatusCodes.Describe(rec.StatusCode);
 
-            _lastSeen.Text = $"Last seen: {rec.ReceivedAt:HH:mm:ss}";
-
-            _capacity.Text = rec.CapacityMah.HasValue ? $"Capacity: {rec.CapacityMah} mAh" : string.Empty;
-            _health.Text = rec.HealthPct.HasValue ? $"Health: {rec.HealthPct}%" : string.Empty;
-            _cycles.Text = rec.Cycles.HasValue ? $"Cycles: {rec.Cycles}" : string.Empty;
-            _value.Text = $"Value: {rec.Value} s";
+            _capacity.Text = rec.CapacityMah.HasValue ? $"Capacity: {rec.CapacityMah} mAh" : "Capacity: —";
+            _health.Text   = rec.HealthPct.HasValue   ? $"Health: {rec.HealthPct}%"         : "Health: —";
         }
     }
 }
