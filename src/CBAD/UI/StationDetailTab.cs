@@ -32,6 +32,13 @@ internal sealed class StationDetailTab : UserControl
     // Stream
     private readonly TextBox _txtStream;
     private readonly Button _btnExport = new() { Text = "Export Raw Data...", Dock = DockStyle.Bottom, Height = 30 };
+
+    // Stream controls
+    private readonly CheckBox _chkAutoScroll = new() { Text = "Auto-scroll", Checked = true, AutoSize = true, Margin = new Padding(4, 4, 4, 3) };
+    private readonly Button   _btnPauseStream = new() { Text = "⏸  Pause", AutoSize = true, Margin = new Padding(4, 2, 4, 2) };
+    private readonly TextBox  _txtFilter      = new() { Width = 160, PlaceholderText = "Filter lines…", Margin = new Padding(4, 2, 4, 2) };
+    private bool _streamPaused;
+
     private StationState? _lastState;
 
     public StationDetailTab(int station)
@@ -56,9 +63,11 @@ internal sealed class StationDetailTab : UserControl
 
         var detailPanel = BuildDetailPanel();
 
+        // Stream panel: toolbar at top, stream fill, export at bottom.
         var streamPanel = new Panel { Dock = DockStyle.Fill };
-        streamPanel.Controls.Add(_txtStream);
-        streamPanel.Controls.Add(_btnExport);
+        streamPanel.Controls.Add(_txtStream);      // DockStyle.Fill — added first, applied last
+        streamPanel.Controls.Add(_btnExport);      // DockStyle.Bottom
+        streamPanel.Controls.Add(BuildStreamToolbar()); // DockStyle.Top — added last, applied first
 
         var inner = new SplitContainer
         {
@@ -89,11 +98,19 @@ internal sealed class StationDetailTab : UserControl
         area.AxisX.Title = "Time";
         area.AxisX.LabelStyle.Format = "HH:mm";
         area.AxisX.IntervalType = DateTimeIntervalType.Minutes;
+        area.AxisX.IntervalAutoMode = IntervalAutoMode.VariableCount;
+        area.AxisX.IsMarginVisible = true;
+        area.AxisX.MajorGrid.LineColor = System.Drawing.Color.LightGray;
+        area.AxisX.MajorGrid.LineDashStyle = ChartDashStyle.Dot;
         area.AxisY.Title = "Voltage (mV)";
+        area.AxisY.IsStartedFromZero = false;
+        area.AxisY.MajorGrid.LineColor = System.Drawing.Color.LightGray;
+        area.AxisY.MajorGrid.LineDashStyle = ChartDashStyle.Dot;
         area.AxisY2.Title = "Health (%)";
         area.AxisY2.Minimum = 0;
         area.AxisY2.Maximum = 100;
         area.AxisY2.Enabled = AxisEnabled.True;
+        area.AxisY2.MajorGrid.Enabled = false;
         _chart.ChartAreas.Add(area);
 
         var voltageSeries = new Series("Voltage (mV)")
@@ -114,7 +131,8 @@ internal sealed class StationDetailTab : UserControl
         };
         _chart.Series.Add(voltageSeries);
         _chart.Series.Add(healthSeries);
-        _chart.Legends.Add(new Legend { Docking = Docking.Bottom });
+        var legend = new Legend { Docking = Docking.Bottom, IsTextAutoFit = true };
+        _chart.Legends.Add(legend);
         _chart.Dock = DockStyle.Fill;
     }
 
@@ -139,6 +157,57 @@ internal sealed class StationDetailTab : UserControl
                 $"Exported {_lastState.RawLines.Count} lines to:{Environment.NewLine}{dlg.FileName}",
                 "Export Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
         };
+    }
+
+    private FlowLayoutPanel BuildStreamToolbar()
+    {
+        var toolbar = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Padding = new Padding(4, 2, 4, 2),
+            BackColor = System.Drawing.SystemColors.ControlLight,
+        };
+
+        var clearFilter = new Button { Text = "✕", Width = 26, Height = 23, Margin = new Padding(0, 2, 6, 2) };
+        clearFilter.Click += (_, __) => _txtFilter.Clear();
+
+        _txtFilter.TextChanged += (_, __) => RefreshStream();
+        _btnPauseStream.Click += (_, __) =>
+        {
+            _streamPaused = !_streamPaused;
+            _btnPauseStream.Text = _streamPaused ? "▶  Resume" : "⏸  Pause";
+            if (!_streamPaused)
+                RefreshStream();
+        };
+
+        toolbar.Controls.Add(new Label { Text = "Filter:", AutoSize = true, Margin = new Padding(4, 6, 4, 3) });
+        toolbar.Controls.Add(_txtFilter);
+        toolbar.Controls.Add(clearFilter);
+        toolbar.Controls.Add(_chkAutoScroll);
+        toolbar.Controls.Add(_btnPauseStream);
+
+        return toolbar;
+    }
+
+    private void RefreshStream()
+    {
+        if (_lastState is null) return;
+
+        var lines = _lastState.RawLines.AsEnumerable();
+        var filter = _txtFilter.Text.Trim();
+        if (!string.IsNullOrEmpty(filter))
+            lines = lines.Where(l => l.Contains(filter, StringComparison.OrdinalIgnoreCase));
+
+        _txtStream.Text = string.Join(Environment.NewLine, lines.TakeLast(200));
+
+        if (_chkAutoScroll.Checked)
+        {
+            _txtStream.SelectionStart = _txtStream.TextLength;
+            _txtStream.ScrollToCaret();
+        }
     }
 
     private Panel BuildDetailPanel()
@@ -233,10 +302,9 @@ internal sealed class StationDetailTab : UserControl
         if (chartable.Count > 0)
             _chart.ChartAreas["Main"].RecalculateAxesScale();
 
-        // Stream: last 15 lines only
-        _txtStream.Text = string.Join(Environment.NewLine, state.RawLines.TakeLast(15));
-        _txtStream.SelectionStart = _txtStream.TextLength;
-        _txtStream.ScrollToCaret();
+        // Stream: update display only when not paused.
+        if (!_streamPaused)
+            RefreshStream();
     }
 
     private static string DescribeEvent(int code) => code switch
