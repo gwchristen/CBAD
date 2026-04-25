@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.IO.Ports;
 using System.Text;
 using CBAD.Simulation;
@@ -24,7 +25,12 @@ internal class MainForm : Form
     private Button btnRefreshPorts = new();
     private Button btnStart = new();
     private Button btnStop = new();
-    private TextBox txtStatus = new();
+
+    // Status indicator controls
+    private readonly Label _lblStatusDot    = new() { AutoSize = false, Width = 14, Height = 14, Margin = new Padding(0, 4, 6, 3) };
+    private readonly Label _lblStatusState  = new() { AutoSize = true, Margin = new Padding(0, 4, 8, 3) };
+    private readonly Label _lblStatusDetail = new() { AutoSize = true, Margin = new Padding(0, 4, 3, 3) };
+    private CaptureLifecycleState _lifecycleState = CaptureLifecycleState.Idle;
 
     private CancellationTokenSource? _cts;
     private Task? _captureTask;
@@ -105,7 +111,7 @@ internal class MainForm : Form
         AddLabeled(grid, "File Prefix", txtPrefix, 3, 2);
 
         chkCsv.Text = "CSV";
-        chkReconnect.Text = "Auto Reconnect";
+        chkReconnect.Text = "Auto-Reconnect";
         numReconnectMs.Minimum = 100;
         numReconnectMs.Maximum = 600000;
         numReconnectMs.Increment = 100;
@@ -113,19 +119,22 @@ internal class MainForm : Form
         var flags = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
         flags.Controls.Add(chkCsv);
         flags.Controls.Add(chkReconnect);
-        flags.Controls.Add(new Label { Text = "Reconnect (ms)", AutoSize = true, Margin = new Padding(20, 8, 3, 3) });
+        flags.Controls.Add(new Label { Text = "Delay (ms)", AutoSize = true, Margin = new Padding(20, 8, 3, 3) });
         flags.Controls.Add(numReconnectMs);
         grid.Controls.Add(flags, 0, 4);
         grid.SetColumnSpan(flags, 4);
 
         topPanel.Controls.Add(grid);
 
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true };
+        var statusBar = BuildStatusBar();
+        topPanel.Controls.Add(statusBar);
+
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(0, 4, 0, 2) };
         btnRefreshPorts.Text = "Refresh Ports";
         btnRefreshPorts.Click += (_, __) => RefreshPorts();
-        btnStart.Text = "Start";
+        btnStart.Text = "▶  Start";
         btnStart.Click += async (_, __) => await StartCaptureAsync();
-        btnStop.Text = "Stop";
+        btnStop.Text = "■  Stop";
         btnStop.Click += async (_, __) => await StopCaptureAsync();
 
         chkSimulation.Text = "Demo Mode";
@@ -136,15 +145,10 @@ internal class MainForm : Form
         var toolTip = new ToolTip();
         toolTip.SetToolTip(chkSimulation, "Run with simulated Cadex data — no hardware required");
 
-        txtStatus.ReadOnly = true;
-        txtStatus.Width = 500;
-
         buttons.Controls.Add(btnRefreshPorts);
         buttons.Controls.Add(btnStart);
         buttons.Controls.Add(btnStop);
         buttons.Controls.Add(chkSimulation);
-        buttons.Controls.Add(new Label { Text = "Status:", AutoSize = true, Margin = new Padding(20, 8, 3, 3) });
-        buttons.Controls.Add(txtStatus);
 
         topPanel.Controls.Add(buttons);
         root.Controls.Add(topPanel);
@@ -176,6 +180,48 @@ internal class MainForm : Form
         control.Dock = DockStyle.Top;
         control.Margin = new Padding(3, 3, 10, 8);
         grid.Controls.Add(control, col, row + 1);
+    }
+
+    private FlowLayoutPanel BuildStatusBar()
+    {
+        _lblStatusState.Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold);
+
+        var bar = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Padding = new Padding(4, 2, 4, 2),
+            BackColor = SystemColors.ControlLight,
+        };
+        bar.Controls.Add(new Label { Text = "Status:", AutoSize = true, Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold), Margin = new Padding(4, 5, 8, 3) });
+        bar.Controls.Add(_lblStatusDot);
+        bar.Controls.Add(_lblStatusState);
+        bar.Controls.Add(_lblStatusDetail);
+
+        SetLifecycleState(CaptureLifecycleState.Idle);
+        return bar;
+    }
+
+    private void SetLifecycleState(CaptureLifecycleState state, string? detail = null)
+    {
+        if (InvokeRequired) { BeginInvoke(() => SetLifecycleState(state, detail)); return; }
+
+        _lifecycleState = state;
+        (_lblStatusDot.BackColor, _lblStatusState.Text) = state switch
+        {
+            CaptureLifecycleState.Idle     => (Color.LightGray,  "Idle"),
+            CaptureLifecycleState.Starting => (Color.Gold,       "Starting…"),
+            CaptureLifecycleState.Running  => (Color.LimeGreen,  "Running"),
+            CaptureLifecycleState.Stopping => (Color.Orange,     "Stopping…"),
+            CaptureLifecycleState.Error    => (Color.Crimson,    "Error"),
+            _                              => (Color.LightGray,  state.ToString()),
+        };
+        _lblStatusDetail.Text      = detail ?? string.Empty;
+        _lblStatusDetail.ForeColor = state == CaptureLifecycleState.Error
+            ? Color.Crimson
+            : SystemColors.ControlText;
     }
 
     private void LoadDefaults()
@@ -276,10 +322,12 @@ internal class MainForm : Form
         if (_captureTask is not null)
             return;
 
+        SetRunningState(true);
+        SetLifecycleState(CaptureLifecycleState.Starting);
+
         try
         {
             _sink = CreateSink();
-            SetStatus($"Logging to: {_sink.Path}");
 
             _cts = new CancellationTokenSource();
 
@@ -307,13 +355,14 @@ internal class MainForm : Form
                 _captureTask = Task.Run(() => service.RunAsync(_cts.Token));
             }
 
-            SetRunningState(true);
+            SetLifecycleState(CaptureLifecycleState.Running, $"Logging to: {_sink.Path}");
 
             await Task.Yield();
         }
         catch (Exception ex)
         {
             AppLog.Error("Cannot start capture", ex);
+            SetLifecycleState(CaptureLifecycleState.Error, ex.Message);
             MessageBox.Show(this, ex.Message, "Cannot start capture", MessageBoxButtons.OK, MessageBoxIcon.Error);
             await StopCaptureAsync();
         }
@@ -363,6 +412,10 @@ internal class MainForm : Form
         _captureTask = null;
         _sink = null;
 
+        // Show Stopping state only if we weren't already in an error state.
+        if (_lifecycleState != CaptureLifecycleState.Error)
+            SetLifecycleState(CaptureLifecycleState.Stopping);
+
         try { cts?.Cancel(); }
         catch (Exception ex)
         {
@@ -386,7 +439,10 @@ internal class MainForm : Form
 
         AppLog.Info("Capture stopped");
         SetRunningState(false);
-        SetStatus("Stopped");
+
+        // Preserve error state visibility; only reset to Idle on a clean stop.
+        if (_lifecycleState != CaptureLifecycleState.Error)
+            SetLifecycleState(CaptureLifecycleState.Idle, "Stopped");
     }
 
     private void SetRunningState(bool running)
@@ -409,6 +465,12 @@ internal class MainForm : Form
         numReconnectMs.Enabled = !running;
     }
 
+    /// <summary>
+    /// Updates the status detail message without changing the lifecycle state badge.
+    /// Called by serial/simulation services to report transient messages (e.g.,
+    /// "Connecting…", "Reconnecting in 2000ms") while the lifecycle state badge
+    /// remains authoritative for the overall connection state color.
+    /// </summary>
     private void SetStatus(string status)
     {
         if (InvokeRequired)
@@ -417,7 +479,7 @@ internal class MainForm : Form
             return;
         }
 
-        txtStatus.Text = status;
+        _lblStatusDetail.Text = status;
     }
 
     private void ApplyStartupDefaults(AppOptions opts)
