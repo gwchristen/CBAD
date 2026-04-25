@@ -1,3 +1,5 @@
+using CBAD;
+
 namespace CBAD.Simulation;
 
 internal sealed class SimulationService
@@ -41,6 +43,7 @@ internal sealed class SimulationService
     public async Task RunAsync(CancellationToken ct)
     {
         int tick = 0;
+        AppLog.Info("Simulation started");
 
         while (!ct.IsCancellationRequested)
         {

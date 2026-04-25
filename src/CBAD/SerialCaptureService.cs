@@ -35,6 +35,7 @@ internal sealed class SerialCaptureService
             try
             {
                 port.Open();
+                AppLog.Info($"Connected: {_options.Port} @ {_options.Baud} baud");
                 _onStatus?.Invoke($"Connected: {_options.Port} @ {_options.Baud} baud");
 
                 // Register a callback so that cancellation closes the port, which unblocks
@@ -68,6 +69,7 @@ internal sealed class SerialCaptureService
             }
             catch (Exception ex)
             {
+                AppLog.Error($"Serial error on {_options.Port}", ex);
                 _onStatus?.Invoke($"Serial error: {ex.Message}");
                 if (!_options.Reconnect)
                     throw;
@@ -84,6 +86,7 @@ internal sealed class SerialCaptureService
                 break;
 
             _onStatus?.Invoke($"Reconnecting in {_options.ReconnectDelayMs}ms...");
+            AppLog.Info($"Reconnecting to {_options.Port} in {_options.ReconnectDelayMs}ms");
             await Task.Delay(_options.ReconnectDelayMs, cancellationToken);
         }
     }
