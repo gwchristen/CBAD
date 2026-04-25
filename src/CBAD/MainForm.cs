@@ -2,6 +2,7 @@ using System.IO.Ports;
 using System.Text;
 using CBAD.Models;
 using CBAD.Parsing;
+using CBAD.Simulation;
 using CBAD.UI;
 
 namespace CBAD;
@@ -20,6 +21,7 @@ public class MainForm : Form
     private CheckBox chkCsv = new();
     private CheckBox chkReconnect = new();
     private NumericUpDown numReconnectMs = new();
+    private CheckBox chkSimulation = new();
     private Button btnBrowse = new();
     private Button btnRefreshPorts = new();
     private Button btnStart = new();
@@ -121,12 +123,21 @@ public class MainForm : Form
         btnStop.Text = "Stop";
         btnStop.Click += (_, __) => StopCapture();
 
+        chkSimulation.Text = "Demo Mode";
+        chkSimulation.AutoSize = true;
+        chkSimulation.Margin = new Padding(12, 5, 3, 3);
+        chkSimulation.CheckedChanged += OnSimulationCheckedChanged;
+
+        var toolTip = new ToolTip();
+        toolTip.SetToolTip(chkSimulation, "Run with simulated Cadex data — no hardware required");
+
         txtStatus.ReadOnly = true;
         txtStatus.Width = 500;
 
         buttons.Controls.Add(btnRefreshPorts);
         buttons.Controls.Add(btnStart);
         buttons.Controls.Add(btnStop);
+        buttons.Controls.Add(chkSimulation);
         buttons.Controls.Add(new Label { Text = "Status:", AutoSize = true, Margin = new Padding(20, 8, 3, 3) });
         buttons.Controls.Add(txtStatus);
 
@@ -262,22 +273,33 @@ public class MainForm : Form
 
         try
         {
-            var options = BuildOptionsFromUi();
-            _sink = options.Csv
-                ? new CsvLineSink(options.OutDir, options.Prefix)
-                : new RawLineSink(options.OutDir, options.Prefix);
-
+            _sink = CreateSink();
             SetStatus($"Logging to: {_sink.Path}");
 
             _cts = new CancellationTokenSource();
-            var service = new SerialCaptureService(
-                options,
-                _sink,
-                onData: null,
-                onStatus: SetStatus,
-                onRawLine: OnRawLine);
 
-            _captureTask = Task.Run(() => service.RunAsync(_cts.Token));
+            if (chkSimulation.Checked)
+            {
+                var sim = new SimulationService(
+                    onRawLine: OnRawLine,
+                    onStatus: SetStatus,
+                    onData: null);
+
+                _captureTask = Task.Run(() => sim.RunAsync(_cts.Token));
+            }
+            else
+            {
+                var options = BuildOptionsFromUi();
+                var service = new SerialCaptureService(
+                    options,
+                    _sink,
+                    onData: null,
+                    onStatus: SetStatus,
+                    onRawLine: OnRawLine);
+
+                _captureTask = Task.Run(() => service.RunAsync(_cts.Token));
+            }
+
             SetRunningState(true);
 
             await Task.Yield();
@@ -287,6 +309,21 @@ public class MainForm : Form
             MessageBox.Show(this, ex.Message, "Cannot start capture", MessageBoxButtons.OK, MessageBoxIcon.Error);
             StopCapture();
         }
+    }
+
+    private ILineSink CreateSink()
+    {
+        var outDir = txtOutDir.Text.Trim();
+        if (string.IsNullOrWhiteSpace(outDir))
+            throw new InvalidOperationException("Please select an output folder.");
+
+        var prefix = txtPrefix.Text.Trim();
+        if (string.IsNullOrWhiteSpace(prefix))
+            prefix = "cadex_raw";
+
+        return chkCsv.Checked
+            ? new CsvLineSink(outDir, prefix)
+            : new RawLineSink(outDir, prefix);
     }
 
     private void OnRawLine(string line)
@@ -317,6 +354,18 @@ public class MainForm : Form
         });
     }
 
+    private void OnSimulationCheckedChanged(object? sender, EventArgs e)
+    {
+        bool sim = chkSimulation.Checked;
+        cbPort.Enabled          = !sim;
+        cbBaud.Enabled          = !sim;
+        cbParity.Enabled        = !sim;
+        cbDataBits.Enabled      = !sim;
+        cbStopBits.Enabled      = !sim;
+        cbHandshake.Enabled     = !sim;
+        btnRefreshPorts.Enabled = !sim;
+    }
+
     private void StopCapture()
     {
         try { _cts?.Cancel(); } catch { }
@@ -338,13 +387,14 @@ public class MainForm : Form
     {
         btnStart.Enabled = !running;
         btnStop.Enabled = running;
-        btnRefreshPorts.Enabled = !running;
-        cbPort.Enabled = !running;
-        cbBaud.Enabled = !running;
-        cbParity.Enabled = !running;
-        cbDataBits.Enabled = !running;
-        cbStopBits.Enabled = !running;
-        cbHandshake.Enabled = !running;
+        chkSimulation.Enabled = !running;
+        btnRefreshPorts.Enabled = !running && !chkSimulation.Checked;
+        cbPort.Enabled = !running && !chkSimulation.Checked;
+        cbBaud.Enabled = !running && !chkSimulation.Checked;
+        cbParity.Enabled = !running && !chkSimulation.Checked;
+        cbDataBits.Enabled = !running && !chkSimulation.Checked;
+        cbStopBits.Enabled = !running && !chkSimulation.Checked;
+        cbHandshake.Enabled = !running && !chkSimulation.Checked;
         txtOutDir.Enabled = !running;
         btnBrowse.Enabled = !running;
         txtPrefix.Enabled = !running;
