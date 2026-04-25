@@ -2,22 +2,22 @@ namespace CBAD.Simulation;
 
 internal sealed class SimulationService
 {
-    private const int TransitionCapacityValue = 70;
-
+    // Each SimBattery: Station, ProcessCode, BaseVoltage, Current, Temp, Health
     private static readonly SimBattery[] Batteries =
     [
-        new SimBattery(1, 16, 1962, 0, 26),
-        new SimBattery(2, 16, 1769, 0, 24),
-        new SimBattery(3, 16, 1865, 0, 27),
-        new SimBattery(4, 16, 1862, 0, 37),
+        new SimBattery(1,  2, 3943,   796, 26, "89\\87"),
+        new SimBattery(2,  7, 1419,  -401, 35, "85\\37"),
+        new SimBattery(3,  4, 3500,   200, 28, "76\\67"),
+        new SimBattery(4,  0, 3800,     0, 24, "40\\45"),
     ];
 
-    private static readonly int[][] StatusSequences =
+    // Each station cycles through a list of (processCode, health) tuples
+    private static readonly (int process, string health)[][] ProcessSequences =
     [
-        [45, 26,  2,  0],
-        [ 2,  0,  1,  4],
-        [ 4, 27,  5, 45],
-        [ 0,  1, 37,  2],
+        [(2, "89\\87"), (2, "90\\87"), (5, "90\\87"), (0, "90\\87")],
+        [(7, "85\\37"), (7, "83\\37"), (0, "83\\37"), (1, "83\\37")],
+        [(4, "76\\67"), (3, "77\\67"), (5, "78\\67"), (0, "78\\67")],
+        [(0, "40\\45"), (1, "40\\45"), (2, "41\\45"), (7, "41\\45")],
     ];
 
     private readonly Action<string>? _onRawLine;
@@ -51,22 +51,22 @@ internal sealed class SimulationService
             for (int i = 0; i < Batteries.Length; i++)
             {
                 var bat = Batteries[i];
-                int statusCode = StatusSequences[i][tick % StatusSequences[i].Length];
-                int cap = bat.BaseCapacity + _rng.Next(-5, 6);
+                var (process, health) = ProcessSequences[i][tick % ProcessSequences[i].Length];
+                int voltage = bat.BaseVoltage + _rng.Next(-5, 6);
 
                 var line = $"0,{bat.Station},\"          \",\"{dateStr}\",\"{timeStr}\",250," +
-                           $"\"{bat.TypeCode}\\{cap}\\{bat.Cycles}\\{bat.Health}\"," +
-                           $"\"{statusCode}\"";
+                           $"\"{process}\\{voltage}\\{bat.Current}\\{bat.Temp}\"," +
+                           $"\"{health}\"";
 
                 _onRawLine?.Invoke(line);
                 _onData?.Invoke(line);
 
-                // 10% chance of a transition record — offset by station index for unique timestamps
+                // 10% chance of a pre-test transition record (adapter inserted)
                 if (_rng.NextDouble() < 0.10)
                 {
                     var transTime = now.AddSeconds(i + 1).ToString("HHmmss");
-                    var transLine = $"0,{bat.Station},\"          \",\"{dateStr}\",\"{transTime}\",20," +
-                                    $"\"{bat.TypeCode}\\{TransitionCapacityValue}\"";
+                    var transLine = $"0,{bat.Station},\"          \",\"{dateStr}\",\"{transTime}\",201," +
+                                    $"\"{process}\\80\"";
                     _onRawLine?.Invoke(transLine);
                     _onData?.Invoke(transLine);
                 }
