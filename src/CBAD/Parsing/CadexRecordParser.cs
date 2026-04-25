@@ -4,6 +4,8 @@ namespace CBAD.Parsing;
 
 internal static class CadexRecordParser
 {
+    private const int MaxStation = 4;
+
     public static CadexRecord? TryParse(string line, DateTimeOffset receivedAt)
     {
         if (string.IsNullOrWhiteSpace(line))
@@ -16,7 +18,7 @@ internal static class CadexRecordParser
         if (!int.TryParse(fields[0].Trim(), out var recordType))
             return null;
 
-        if (!int.TryParse(fields[1].Trim(), out var station) || station < 1 || station > 4)
+        if (!int.TryParse(fields[1].Trim(), out var station) || station < 1 || station > MaxStation)
             return null;
 
         var batteryId = fields[2].Trim();
