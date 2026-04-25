@@ -56,4 +56,53 @@ public class LineReassemblerTests
         Assert.Equal("part1", lines[0]);
         Assert.Equal("part2", lines[1]);
     }
+
+    [Fact]
+    public void BurstInput_ManyLinesInOneChunk_AllYielded()
+    {
+        var r = new LineReassembler();
+        var sb = new System.Text.StringBuilder();
+        for (int i = 1; i <= 20; i++)
+            sb.Append($"burst{i}\n");
+
+        var lines = r.Feed(sb.ToString());
+
+        Assert.Equal(20, lines.Count);
+        for (int i = 1; i <= 20; i++)
+            Assert.Equal($"burst{i}", lines[i - 1]);
+    }
+
+    [Fact]
+    public void PartialLineAtStart_HeldUntilNewlineArrives()
+    {
+        var r = new LineReassembler();
+        var first = r.Feed("incomplete");
+        Assert.Empty(first);
+
+        var second = r.Feed(" line\n");
+        Assert.Single(second);
+        Assert.Equal("incomplete line", second[0]);
+    }
+
+    [Fact]
+    public void OnlyNewline_YieldsEmptyLine()
+    {
+        var r = new LineReassembler();
+        var lines = r.Feed("\n");
+        Assert.Single(lines);
+        Assert.Equal(string.Empty, lines[0]);
+    }
+
+    [Fact]
+    public void TrailingPartialLine_NotYieldedUntilNewline()
+    {
+        var r = new LineReassembler();
+        var lines = r.Feed("complete\ntrailing");
+        Assert.Single(lines);
+        Assert.Equal("complete", lines[0]);
+
+        var more = r.Feed(" more\n");
+        Assert.Single(more);
+        Assert.Equal("trailing more", more[0]);
+    }
 }

@@ -11,7 +11,6 @@ internal sealed class SerialCaptureService
     private readonly Action<string>? _onData;
     private readonly Action<string>? _onStatus;
     private readonly Action<string>? _onRawLine;
-    private readonly LineReassembler _reassembler = new();
 
     public SerialCaptureService(
         AppOptions options,
@@ -38,25 +37,29 @@ internal sealed class SerialCaptureService
                 port.Open();
                 _onStatus?.Invoke($"Connected: {_options.Port} @ {_options.Baud} baud");
 
-                while (!cancellationToken.IsCancellationRequested)
+                // Register a callback so that cancellation closes the port, which unblocks
+                // any pending ReadAsync on the base stream promptly.
+                using var reg = cancellationToken.Register(() =>
                 {
-                    var chunk = port.ReadExisting();
-                    if (!string.IsNullOrEmpty(chunk))
-                    {
-                        var ts = DateTimeOffset.UtcNow;
-                        _sink.Write(ts, chunk);
-                        _onData?.Invoke(chunk);
+                    if (port.IsOpen)
+                        try { port.Close(); } catch { }
+                });
 
-                        if (_onRawLine is not null)
-                        {
-                            foreach (var line in _reassembler.Feed(chunk))
-                                _onRawLine(line);
-                        }
-                    }
-                    else
-                    {
-                        await Task.Delay(50, cancellationToken);
-                    }
+                var processor = new SerialStreamProcessor(
+                    port.BaseStream,
+                    port.Encoding,
+                    _sink,
+                    onData: _onData,
+                    onRawLine: _onRawLine);
+
+                try
+                {
+                    await processor.RunAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception) when (cancellationToken.IsCancellationRequested)
+                {
+                    // Port was closed by the cancellation callback — treat as clean stop.
+                    throw new OperationCanceledException(cancellationToken);
                 }
             }
             catch (OperationCanceledException)
@@ -91,7 +94,7 @@ internal sealed class SerialCaptureService
         {
             Handshake = options.Handshake,
             Encoding = Encoding.ASCII,
-            ReadTimeout = 500,
+            ReadTimeout = SerialPort.InfiniteTimeout,
             DtrEnable = false,
             RtsEnable = false
         };
