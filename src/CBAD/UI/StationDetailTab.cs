@@ -243,6 +243,6 @@ internal sealed class StationDetailTab : UserControl
         27  => "OhmTest",
         201 => "Adapter Inserted",
         250 => "Normal Processing",
-        _   => $"{code}s elapsed",
+        _   => $"{code} sec elapsed",
     };
 }
