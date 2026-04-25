@@ -1,13 +1,11 @@
 using System.IO.Ports;
 using System.Text;
-using CBAD.Models;
-using CBAD.Parsing;
 using CBAD.Simulation;
 using CBAD.UI;
 
 namespace CBAD;
 
-public class MainForm : Form
+internal class MainForm : Form
 {
     // Serial connection controls
     private ComboBox cbPort = new();
@@ -32,20 +30,14 @@ public class MainForm : Form
     private Task? _captureTask;
     private ILineSink? _sink;
 
-    // Station state (index 0 = station 1, etc.)
-    private readonly StationState[] _states = new StationState[4]
-    {
-        new() { Station = 1 },
-        new() { Station = 2 },
-        new() { Station = 3 },
-        new() { Station = 4 },
-    };
+    // Station state manager — holds ring-buffer history; owns parse + update logic.
+    private readonly StationStateManager _stateManager = new();
 
     // Tab UI references
     private OverviewTab _overviewTab = null!;
     private StationDetailTab[] _detailTabs = null!;
 
-    public MainForm()
+    public MainForm(AppOptions? startupDefaults = null)
     {
         Text = "CBAD — Battery Analyzer Dashboard";
         Width = 1200;
@@ -54,6 +46,19 @@ public class MainForm : Form
 
         BuildUi();
         LoadDefaults();
+
+        // Wire station-state events after UI controls exist.
+        _stateManager.StationUpdated += state =>
+        {
+            _overviewTab.UpdateStation(state);
+            _detailTabs[state.Station - 1].UpdateStation(state);
+        };
+        _stateManager.ParseFailed += line =>
+            AppLog.Warn($"Parse failed: {line}");
+
+        if (startupDefaults is not null)
+            ApplyStartupDefaults(startupDefaults);
+
         RefreshPorts();
         SetRunningState(false);
     }
@@ -280,6 +285,7 @@ public class MainForm : Form
 
             if (chkSimulation.Checked)
             {
+                AppLog.Info("Starting simulation mode");
                 var sim = new SimulationService(
                     onRawLine: OnRawLine,
                     onStatus: SetStatus,
@@ -290,6 +296,7 @@ public class MainForm : Form
             else
             {
                 var options = BuildOptionsFromUi();
+                AppLog.Info($"Starting capture on {options.Port} @ {options.Baud} baud");
                 var service = new SerialCaptureService(
                     options,
                     _sink,
@@ -306,6 +313,7 @@ public class MainForm : Form
         }
         catch (Exception ex)
         {
+            AppLog.Error("Cannot start capture", ex);
             MessageBox.Show(this, ex.Message, "Cannot start capture", MessageBoxButtons.OK, MessageBoxIcon.Error);
             await StopCaptureAsync();
         }
@@ -328,33 +336,8 @@ public class MainForm : Form
 
     private void OnRawLine(string line)
     {
-        var receivedAt = DateTimeOffset.UtcNow;
-        var record = CadexRecordParser.TryParse(line, receivedAt);
-
-        if (record is null)
-            return;
-
-        var stateIdx = record.Station - 1;
-        var capturedRecord = record;
-
         // All state mutations and UI updates happen on the UI thread to avoid data races.
-        BeginInvoke(() =>
-        {
-            var state = _states[stateIdx];
-
-            state.Latest = capturedRecord;
-
-            state.History.Add(capturedRecord);
-            if (state.History.Count > 200)
-                state.History.RemoveAt(0);
-
-            state.RawLines.Add(line);
-            if (state.RawLines.Count > 500)
-                state.RawLines.RemoveAt(0);
-
-            _overviewTab.UpdateStation(state);
-            _detailTabs[stateIdx].UpdateStation(state);
-        });
+        BeginInvoke(() => _stateManager.ProcessLine(line));
     }
 
     private void OnSimulationCheckedChanged(object? sender, EventArgs e)
@@ -381,18 +364,27 @@ public class MainForm : Form
         _sink = null;
 
         try { cts?.Cancel(); }
-        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Cancel error: {ex.Message}"); }
+        catch (Exception ex)
+        {
+            AppLog.Error("CancellationTokenSource.Cancel error", ex);
+            System.Diagnostics.Debug.WriteLine($"Cancel error: {ex.Message}");
+        }
         cts?.Dispose();
 
         if (captureTask is not null)
         {
             try { await captureTask; }
             catch (OperationCanceledException) { }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Capture task stopped with error: {ex.Message}"); }
+            catch (Exception ex)
+            {
+                AppLog.Error("Capture task stopped with error", ex);
+                System.Diagnostics.Debug.WriteLine($"Capture task stopped with error: {ex.Message}");
+            }
         }
 
         sink?.Dispose();
 
+        AppLog.Info("Capture stopped");
         SetRunningState(false);
         SetStatus("Stopped");
     }
@@ -426,6 +418,33 @@ public class MainForm : Form
         }
 
         txtStatus.Text = status;
+    }
+
+    private void ApplyStartupDefaults(AppOptions opts)
+    {
+        if (!string.IsNullOrWhiteSpace(opts.Port))
+            cbPort.Text = opts.Port;
+
+        if (opts.Baud > 0)
+            cbBaud.Text = opts.Baud.ToString();
+
+        cbParity.Text    = opts.Parity.ToString();
+        cbDataBits.Text  = opts.DataBits.ToString();
+        cbStopBits.Text  = opts.StopBits.ToString();
+        cbHandshake.Text = opts.Handshake.ToString();
+
+        if (!string.IsNullOrWhiteSpace(opts.OutDir))
+            txtOutDir.Text = opts.OutDir;
+
+        if (!string.IsNullOrWhiteSpace(opts.Prefix))
+            txtPrefix.Text = opts.Prefix;
+
+        chkCsv.Checked       = opts.Csv;
+        chkReconnect.Checked = opts.Reconnect;
+
+        if (opts.ReconnectDelayMs >= (int)numReconnectMs.Minimum &&
+            opts.ReconnectDelayMs <= (int)numReconnectMs.Maximum)
+            numReconnectMs.Value = opts.ReconnectDelayMs;
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
