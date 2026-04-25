@@ -8,40 +8,98 @@ public class CadexRecordParserTests
         new DateTimeOffset(2026, 4, 24, 15, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void FullValid8FieldLine_ParsesCorrectly()
+    public void Full4FieldRecord_ParsesCorrectly()
     {
-        var line = @"0,1,""          "",""04/24/2026"",""144500"",250,""16\1965\0\26"",""45""";
+        var line = @"0,1,""          "",""04/24/2026"",""141900"",250,""16\1961\796\26"",""40\45""";
         var rec = CadexRecordParser.TryParse(line, TestTime);
 
         Assert.NotNull(rec);
-        Assert.Equal(0, rec.RecordType);
+        Assert.Equal(0, rec.AnalyzerId);
         Assert.Equal(1, rec.Station);
         Assert.Equal(string.Empty, rec.BatteryId);
-        Assert.Equal(250, rec.Value);
-        Assert.Equal("16\\1965\\0\\26", rec.ParamBlock);
-        Assert.Equal(16, rec.BatteryTypeCode);
-        Assert.Equal(1965, rec.CapacityMah);
-        Assert.Equal(0, rec.Cycles);
-        Assert.Equal(26, rec.HealthPct);
-        Assert.Equal("45", rec.StatusCode);
+        Assert.Equal(250, rec.EventCode);
+        Assert.Equal("16\\1961\\796\\26", rec.ParamBlock);
+        Assert.Equal(16, rec.ProcessCode);
+        Assert.Equal(1961, rec.VoltageMv);
+        Assert.Equal(796, rec.CurrentMa);
+        Assert.Equal(26, rec.TemperatureC);
+        Assert.Equal(40, rec.HealthCurrent);
+        Assert.Equal(45, rec.HealthPrevious);
         Assert.Equal(TestTime, rec.ReceivedAt);
         Assert.Equal(line, rec.RawLine);
     }
 
     [Fact]
-    public void ShortParamBlock_2Fields_CapacityAndHealthAreNull()
+    public void NegativeCurrent_Discharging_ParsesCorrectly()
     {
-        var line = @"0,1,""bat"",""04/24/2026"",""144708"",17,""4\70""";
+        var line = @"0,2,""CDX01"",""01/24/2001"",""100200"",250,""7\1419\-401\35"",""85\37""";
         var rec = CadexRecordParser.TryParse(line, TestTime);
 
         Assert.NotNull(rec);
-        Assert.Equal(17, rec.Value);
-        Assert.Equal("4\\70", rec.ParamBlock);
-        Assert.Null(rec.BatteryTypeCode);
-        Assert.Null(rec.CapacityMah);
-        Assert.Null(rec.Cycles);
-        Assert.Null(rec.HealthPct);
-        Assert.Equal(string.Empty, rec.StatusCode);
+        Assert.Equal(7, rec.ProcessCode);
+        Assert.Equal(1419, rec.VoltageMv);
+        Assert.Equal(-401, rec.CurrentMa);
+        Assert.Equal(35, rec.TemperatureC);
+        Assert.Equal(85, rec.HealthCurrent);
+        Assert.Equal(37, rec.HealthPrevious);
+    }
+
+    [Fact]
+    public void EmptyHealthField_BothHealthValuesNull()
+    {
+        var line = @"0,2,""CDX01"",""01/24/2001"",""085140"",250,""2\1416\398\21"",""""";
+        var rec = CadexRecordParser.TryParse(line, TestTime);
+
+        Assert.NotNull(rec);
+        Assert.Null(rec.HealthCurrent);
+        Assert.Null(rec.HealthPrevious);
+    }
+
+    [Fact]
+    public void PreTestInsertion_2FieldParam_TargetCapacityParsed()
+    {
+        var line = @"0,2,"" "",""01/24/2001"",""085120"",201,""0\80""";
+        var rec = CadexRecordParser.TryParse(line, TestTime);
+
+        Assert.NotNull(rec);
+        Assert.Equal(201, rec.EventCode);
+        Assert.Equal(0, rec.ProcessCode);
+        Assert.Equal(80, rec.TargetCapacityPct);
+        Assert.Null(rec.VoltageMv);
+    }
+
+    [Fact]
+    public void OhmTest_ResistanceParsed()
+    {
+        var line = @"0,2,""CDX01"",""01/24/2001"",""085456"",27,""0\80"",341";
+        var rec = CadexRecordParser.TryParse(line, TestTime);
+
+        Assert.NotNull(rec);
+        Assert.Equal(27, rec.EventCode);
+        Assert.Equal(341, rec.ResistanceMOhm);
+    }
+
+    [Fact]
+    public void SingleHealthValue_NoPrevious()
+    {
+        var line = @"0,2,""CDX01"",""01/25/2001"",""090500"",250,""5\1694\7\28"",""89""";
+        var rec = CadexRecordParser.TryParse(line, TestTime);
+
+        Assert.NotNull(rec);
+        Assert.Equal(89, rec.HealthCurrent);
+        Assert.Null(rec.HealthPrevious);
+    }
+
+    [Fact]
+    public void HealthField_SlashDelimiter_ParsesCorrectly()
+    {
+        // Health field uses '/' as delimiter instead of '\'
+        var line = @"0,1,""          "",""04/24/2026"",""141900"",250,""16\1961\796\26"",""40/45""";
+        var rec = CadexRecordParser.TryParse(line, TestTime);
+
+        Assert.NotNull(rec);
+        Assert.Equal(40, rec.HealthCurrent);
+        Assert.Equal(45, rec.HealthPrevious);
     }
 
     [Fact]
@@ -69,20 +127,33 @@ public class CadexRecordParserTests
     }
 
     [Fact]
-    public void StatusCode_MapsToCorrectDescription()
+    public void ProcessCode_MapsToCorrectDescription()
     {
         Assert.Equal("Ready", CadexStatusCodes.Describe("0"));
         Assert.Equal("Charge", CadexStatusCodes.Describe("1"));
-        Assert.Equal("Discharge", CadexStatusCodes.Describe("2"));
+        Assert.Equal("Charging", CadexStatusCodes.Describe("2"));
         Assert.Equal("Rest", CadexStatusCodes.Describe("3"));
         Assert.Equal("Prime", CadexStatusCodes.Describe("4"));
-        Assert.Equal("Complete", CadexStatusCodes.Describe("5"));
-        Assert.Equal("Error", CadexStatusCodes.Describe("12"));
-        Assert.Equal("Standby", CadexStatusCodes.Describe("24"));
-        Assert.Equal("Float Charge", CadexStatusCodes.Describe("26"));
-        Assert.Equal("Recondition", CadexStatusCodes.Describe("27"));
-        Assert.Equal("Auto-test", CadexStatusCodes.Describe("37"));
-        Assert.Equal("Standby Charge", CadexStatusCodes.Describe("45"));
-        Assert.Equal("Status 99", CadexStatusCodes.Describe("99"));
+        Assert.Equal("Ready (Trickle)", CadexStatusCodes.Describe("5"));
+        Assert.Equal("Discharging", CadexStatusCodes.Describe("7"));
+        Assert.Equal("QuickTest Complete", CadexStatusCodes.Describe("35"));
+        Assert.Equal("Process 99", CadexStatusCodes.Describe("99"));
+        Assert.Equal("—", CadexStatusCodes.Describe(null));
+        Assert.Equal("—", CadexStatusCodes.Describe(""));
+    }
+
+    [Fact]
+    public void TwoFieldParam_NonInsertionEvent_VoltageParsed()
+    {
+        // 2-field param for an active-test event (not 201/20) → process + voltage
+        var line = @"0,2,""CDX01"",""01/24/2001"",""085130"",11,""2\1416""";
+        var rec = CadexRecordParser.TryParse(line, TestTime);
+
+        Assert.NotNull(rec);
+        Assert.Equal(11, rec.EventCode);
+        Assert.Equal(2, rec.ProcessCode);
+        Assert.Equal(1416, rec.VoltageMv);
+        Assert.Null(rec.TargetCapacityPct);
     }
 }
+

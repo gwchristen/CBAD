@@ -101,7 +101,7 @@ internal sealed class OverviewTab : UserControl
         {
             _statusDot.BackColor = System.Drawing.Color.LightGray;
             _statusText.Text = "—";
-            _capacity.Text = "Capacity: —";
+            _capacity.Text = "Voltage: —";
             _health.Text   = "Health: —";
         }
 
@@ -110,16 +110,12 @@ internal sealed class OverviewTab : UserControl
             var rec = state.Latest;
             if (rec is null) { ResetToNoData(); return; }
 
-            _statusDot.BackColor = string.IsNullOrEmpty(rec.StatusCode)
-                ? System.Drawing.Color.LightGray
-                : CadexStatusCodes.StatusColor(rec.StatusCode);
+            var processCodeStr = rec.ProcessCode?.ToString() ?? "";
+            _statusDot.BackColor = CadexStatusCodes.StatusColor(processCodeStr);
+            _statusText.Text     = CadexStatusCodes.Describe(processCodeStr);
 
-            _statusText.Text = string.IsNullOrEmpty(rec.StatusCode)
-                ? "—"
-                : CadexStatusCodes.Describe(rec.StatusCode);
-
-            _capacity.Text = rec.CapacityMah.HasValue ? $"Capacity: {rec.CapacityMah} mAh" : "Capacity: —";
-            _health.Text   = rec.HealthPct.HasValue   ? $"Health: {rec.HealthPct}%"         : "Health: —";
+            _capacity.Text = rec.VoltageMv.HasValue  ? $"Voltage: {rec.VoltageMv} mV" : "Voltage: —";
+            _health.Text   = rec.HealthCurrent.HasValue ? $"Health: {rec.HealthCurrent}%" : "Health: —";
         }
     }
 }

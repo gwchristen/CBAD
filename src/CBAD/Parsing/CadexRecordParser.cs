@@ -15,7 +15,7 @@ internal static class CadexRecordParser
         if (fields.Count < 6)
             return null;
 
-        if (!int.TryParse(fields[0].Trim(), out var recordType))
+        if (!int.TryParse(fields[0].Trim(), out var analyzerId))
             return null;
 
         if (!int.TryParse(fields[1].Trim(), out var station) || station < 1 || station > MaxStation)
@@ -31,44 +31,80 @@ internal static class CadexRecordParser
                 out var timestamp))
             return null;
 
-        if (!int.TryParse(fields[5].Trim(), out var value))
+        if (!int.TryParse(fields[5].Trim(), out var eventCode))
             return null;
 
         var paramBlock = fields.Count > 6 ? fields[6] : string.Empty;
-        var statusCode = fields.Count > 7 ? fields[7].Trim() : string.Empty;
+        var healthField = fields.Count > 7 ? fields[7].Trim() : string.Empty;
 
-        int? batteryTypeCode = null;
-        int? capacityMah = null;
-        int? cycles = null;
-        int? healthPct = null;
+        int? processCode = null;
+        int? voltageMv = null;
+        int? currentMa = null;
+        int? temperatureC = null;
+        int? targetCapacityPct = null;
 
         if (!string.IsNullOrEmpty(paramBlock))
         {
             var parts = paramBlock.Split('\\');
             if (parts.Length >= 4)
             {
-                if (int.TryParse(parts[0], out var btc)) batteryTypeCode = btc;
-                if (int.TryParse(parts[1], out var cap)) capacityMah = cap;
-                if (int.TryParse(parts[2], out var cyc)) cycles = cyc;
-                if (int.TryParse(parts[3], out var hlt)) healthPct = hlt;
+                if (int.TryParse(parts[0].Trim(), out var pc))  processCode   = pc;
+                if (int.TryParse(parts[1].Trim(), out var mv))  voltageMv     = mv;
+                if (int.TryParse(parts[2].Trim(), out var ma))  currentMa     = ma;
+                if (int.TryParse(parts[3].Trim(), out var tc))  temperatureC  = tc;
+            }
+            else if (parts.Length == 2)
+            {
+                if (int.TryParse(parts[0].Trim(), out var pc)) processCode = pc;
+                if (eventCode == 201 || eventCode == 20)
+                {
+                    if (int.TryParse(parts[1].Trim(), out var tcp)) targetCapacityPct = tcp;
+                }
+                else
+                {
+                    if (int.TryParse(parts[1].Trim(), out var mv)) voltageMv = mv;
+                }
             }
         }
 
+        int? healthCurrent = null;
+        int? healthPrevious = null;
+
+        if (!string.IsNullOrEmpty(healthField))
+        {
+            // Delimiter may be '\' or '/'
+            var hParts = healthField.Contains('\\')
+                ? healthField.Split('\\')
+                : healthField.Split('/');
+
+            if (hParts.Length >= 1 && int.TryParse(hParts[0].Trim(), out var hc)) healthCurrent  = hc;
+            if (hParts.Length >= 2 && int.TryParse(hParts[1].Trim(), out var hp)) healthPrevious = hp;
+        }
+
+        // Optional field 8: ResistanceMOhm (OhmTest, event=27)
+        int? resistanceMOhm = null;
+        if (fields.Count > 8 && int.TryParse(fields[8].Trim(), out var res))
+            resistanceMOhm = res;
+
         return new CadexRecord
         {
-            RecordType = recordType,
-            Station = station,
-            BatteryId = batteryId,
-            Timestamp = timestamp,
-            ReceivedAt = receivedAt,
-            Value = value,
-            ParamBlock = paramBlock,
-            BatteryTypeCode = batteryTypeCode,
-            CapacityMah = capacityMah,
-            Cycles = cycles,
-            HealthPct = healthPct,
-            StatusCode = statusCode,
-            RawLine = line
+            AnalyzerId        = analyzerId,
+            Station           = station,
+            BatteryId         = batteryId,
+            Timestamp         = timestamp,
+            ReceivedAt        = receivedAt,
+            EventCode         = eventCode,
+            ParamBlock        = paramBlock,
+            ProcessCode       = processCode,
+            VoltageMv         = voltageMv,
+            CurrentMa         = currentMa,
+            TemperatureC      = temperatureC,
+            TargetCapacityPct = targetCapacityPct,
+            HealthField       = healthField,
+            HealthCurrent     = healthCurrent,
+            HealthPrevious    = healthPrevious,
+            ResistanceMOhm    = resistanceMOhm,
+            RawLine           = line
         };
     }
 

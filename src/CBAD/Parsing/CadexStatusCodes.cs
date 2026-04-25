@@ -6,29 +6,25 @@ internal static class CadexStatusCodes
     {
         { "0",  "Ready" },
         { "1",  "Charge" },
-        { "2",  "Discharge" },
+        { "2",  "Charging" },
         { "3",  "Rest" },
         { "4",  "Prime" },
-        { "5",  "Complete" },
-        { "12", "Error" },
-        { "24", "Standby" },
-        { "26", "Float Charge" },
-        { "27", "Recondition" },
-        { "37", "Auto-test" },
-        { "45", "Standby Charge" },
+        { "5",  "Ready (Trickle)" },
+        { "7",  "Discharging" },
+        { "35", "QuickTest Complete" },
     };
 
-    public static string Describe(string code) =>
-        _map.TryGetValue(code.Trim(), out var desc) ? desc : $"Status {code}";
+    public static string Describe(string? code) =>
+        string.IsNullOrEmpty(code) ? "—"
+        : _map.TryGetValue(code.Trim(), out var d) ? d : $"Process {code}";
 
-    public static System.Drawing.Color StatusColor(string code) =>
-        code.Trim() switch
+    public static System.Drawing.Color StatusColor(string? code) =>
+        (code ?? "").Trim() switch
         {
-            "0" or "5" or "24" or "26" or "45" => System.Drawing.Color.LimeGreen,
-            "1" or "4"                          => System.Drawing.Color.Gold,
-            "2"                                 => System.Drawing.Color.DeepSkyBlue,
-            "3" or "27" or "37"                 => System.Drawing.Color.Orange,
-            "12"                                => System.Drawing.Color.Red,
-            _                                   => System.Drawing.Color.LightGray,
+            "0" or "5" or "35" => System.Drawing.Color.LimeGreen,
+            "1" or "2" or "4"  => System.Drawing.Color.Gold,
+            "7"                => System.Drawing.Color.DeepSkyBlue,
+            "3"                => System.Drawing.Color.Orange,
+            _                  => System.Drawing.Color.LightGray,
         };
 }
