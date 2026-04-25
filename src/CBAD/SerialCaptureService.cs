@@ -1,5 +1,6 @@
 using System.IO.Ports;
 using System.Text;
+using CBAD.Parsing;
 
 namespace CBAD;
 
@@ -9,13 +10,21 @@ internal sealed class SerialCaptureService
     private readonly ILineSink _sink;
     private readonly Action<string>? _onData;
     private readonly Action<string>? _onStatus;
+    private readonly Action<string>? _onRawLine;
+    private readonly LineReassembler _reassembler = new();
 
-    public SerialCaptureService(AppOptions options, ILineSink sink, Action<string>? onData = null, Action<string>? onStatus = null)
+    public SerialCaptureService(
+        AppOptions options,
+        ILineSink sink,
+        Action<string>? onData = null,
+        Action<string>? onStatus = null,
+        Action<string>? onRawLine = null)
     {
         _options = options;
         _sink = sink;
         _onData = onData;
         _onStatus = onStatus;
+        _onRawLine = onRawLine;
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -37,6 +46,12 @@ internal sealed class SerialCaptureService
                         var ts = DateTimeOffset.UtcNow;
                         _sink.Write(ts, chunk);
                         _onData?.Invoke(chunk);
+
+                        if (_onRawLine is not null)
+                        {
+                            foreach (var line in _reassembler.Feed(chunk))
+                                _onRawLine(line);
+                        }
                     }
                     else
                     {

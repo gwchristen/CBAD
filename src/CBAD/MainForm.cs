@@ -1,10 +1,14 @@
 using System.IO.Ports;
 using System.Text;
+using CBAD.Models;
+using CBAD.Parsing;
+using CBAD.UI;
 
 namespace CBAD;
 
 public class MainForm : Form
 {
+    // Serial connection controls
     private ComboBox cbPort = new();
     private ComboBox cbBaud = new();
     private ComboBox cbParity = new();
@@ -21,17 +25,29 @@ public class MainForm : Form
     private Button btnStart = new();
     private Button btnStop = new();
     private TextBox txtStatus = new();
-    private TextBox txtPreview = new();
 
     private CancellationTokenSource? _cts;
     private Task? _captureTask;
     private ILineSink? _sink;
 
+    // Station state (index 0 = station 1, etc.)
+    private readonly StationState[] _states = new StationState[4]
+    {
+        new() { Station = 1 },
+        new() { Station = 2 },
+        new() { Station = 3 },
+        new() { Station = 4 },
+    };
+
+    // Tab UI references
+    private OverviewTab _overviewTab = null!;
+    private StationDetailTab[] _detailTabs = null!;
+
     public MainForm()
     {
-        Text = "CBAD Serial Logger";
-        Width = 1000;
-        Height = 700;
+        Text = "CBAD — Battery Analyzer Dashboard";
+        Width = 1200;
+        Height = 800;
         StartPosition = FormStartPosition.CenterScreen;
 
         BuildUi();
@@ -46,13 +62,15 @@ public class MainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 3,
-            Padding = new Padding(10)
+            RowCount = 2,
+            Padding = new Padding(6)
         };
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         Controls.Add(root);
+
+        // ── Top panel: connection controls ──────────────────────────────
+        var topPanel = new Panel { Dock = DockStyle.Top, AutoSize = true };
 
         var grid = new TableLayoutPanel
         {
@@ -67,7 +85,6 @@ public class MainForm : Form
         AddLabeled(grid, "Baud", cbBaud, 1, 0);
         AddLabeled(grid, "Parity", cbParity, 2, 0);
         AddLabeled(grid, "Data Bits", cbDataBits, 3, 0);
-
         AddLabeled(grid, "Stop Bits", cbStopBits, 0, 2);
         AddLabeled(grid, "Handshake", cbHandshake, 1, 2);
 
@@ -78,7 +95,6 @@ public class MainForm : Form
         outDirPanel.Controls.Add(txtOutDir);
         outDirPanel.Controls.Add(btnBrowse);
         AddLabeled(grid, "Output Folder", outDirPanel, 2, 2);
-
         AddLabeled(grid, "File Prefix", txtPrefix, 3, 2);
 
         chkCsv.Text = "CSV";
@@ -95,7 +111,7 @@ public class MainForm : Form
         grid.Controls.Add(flags, 0, 4);
         grid.SetColumnSpan(flags, 4);
 
-        root.Controls.Add(grid);
+        topPanel.Controls.Add(grid);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true };
         btnRefreshPorts.Text = "Refresh Ports";
@@ -114,15 +130,27 @@ public class MainForm : Form
         buttons.Controls.Add(new Label { Text = "Status:", AutoSize = true, Margin = new Padding(20, 8, 3, 3) });
         buttons.Controls.Add(txtStatus);
 
-        root.Controls.Add(buttons);
+        topPanel.Controls.Add(buttons);
+        root.Controls.Add(topPanel);
 
-        txtPreview.Multiline = true;
-        txtPreview.ScrollBars = ScrollBars.Both;
-        txtPreview.WordWrap = false;
-        txtPreview.Dock = DockStyle.Fill;
-        txtPreview.Font = new System.Drawing.Font("Consolas", 10);
+        // ── Tab control ─────────────────────────────────────────────────
+        var tabs = new TabControl { Dock = DockStyle.Fill };
 
-        root.Controls.Add(txtPreview);
+        _overviewTab = new OverviewTab();
+        var tabOverview = new TabPage("Overview");
+        tabOverview.Controls.Add(_overviewTab);
+        tabs.TabPages.Add(tabOverview);
+
+        _detailTabs = new StationDetailTab[4];
+        for (int i = 0; i < 4; i++)
+        {
+            _detailTabs[i] = new StationDetailTab(i + 1);
+            var tp = new TabPage($"Station {i + 1}");
+            tp.Controls.Add(_detailTabs[i]);
+            tabs.TabPages.Add(tp);
+        }
+
+        root.Controls.Add(tabs);
     }
 
     private static void AddLabeled(TableLayoutPanel grid, string label, Control control, int col, int row)
@@ -239,15 +267,15 @@ public class MainForm : Form
                 ? new CsvLineSink(options.OutDir, options.Prefix)
                 : new RawLineSink(options.OutDir, options.Prefix);
 
-            txtPreview.Clear();
             SetStatus($"Logging to: {_sink.Path}");
 
             _cts = new CancellationTokenSource();
             var service = new SerialCaptureService(
                 options,
                 _sink,
-                onData: AppendPreview,
-                onStatus: SetStatus);
+                onData: null,
+                onStatus: SetStatus,
+                onRawLine: OnRawLine);
 
             _captureTask = Task.Run(() => service.RunAsync(_cts.Token));
             SetRunningState(true);
@@ -261,22 +289,42 @@ public class MainForm : Form
         }
     }
 
+    private void OnRawLine(string line)
+    {
+        var receivedAt = DateTimeOffset.UtcNow;
+        var record = CadexRecordParser.TryParse(line, receivedAt);
+
+        if (record is null)
+            return;
+
+        var stateIdx = record.Station - 1;
+        var state = _states[stateIdx];
+
+        state.Latest = record;
+
+        state.History.Add(record);
+        if (state.History.Count > 200)
+            state.History.RemoveAt(0);
+
+        state.RawLines.Add(line);
+        if (state.RawLines.Count > 500)
+            state.RawLines.RemoveAt(0);
+
+        BeginInvoke(() =>
+        {
+            _overviewTab.UpdateStation(state);
+            _detailTabs[stateIdx].UpdateStation(state);
+        });
+    }
+
     private void StopCapture()
     {
-        try
-        {
-            _cts?.Cancel();
-        }
-        catch { }
+        try { _cts?.Cancel(); } catch { }
 
         _cts?.Dispose();
         _cts = null;
 
-        try
-        {
-            _captureTask?.Wait(500);
-        }
-        catch { }
+        try { _captureTask?.Wait(500); } catch { }
         _captureTask = null;
 
         _sink?.Dispose();
@@ -303,25 +351,6 @@ public class MainForm : Form
         chkCsv.Enabled = !running;
         chkReconnect.Enabled = !running;
         numReconnectMs.Enabled = !running;
-    }
-
-    private void AppendPreview(string data)
-    {
-        if (InvokeRequired)
-        {
-            BeginInvoke(new Action<string>(AppendPreview), data);
-            return;
-        }
-
-        txtPreview.AppendText(data);
-
-        const int maxChars = 200_000;
-        if (txtPreview.TextLength > maxChars)
-        {
-            txtPreview.Text = txtPreview.Text[^maxChars..];
-            txtPreview.SelectionStart = txtPreview.TextLength;
-            txtPreview.ScrollToCaret();
-        }
     }
 
     private void SetStatus(string status)
