@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace CBAD.Tests;
 
 public class CsvLineSinkTests : IDisposable
@@ -76,5 +78,57 @@ public class CsvLineSinkTests : IDisposable
         var lines = File.ReadAllLines(sink.Path);
         Assert.Equal(2, lines.Length);
         Assert.Contains("\"say \"\"hello\"\"\"", lines[1]);
+    }
+
+    [Fact]
+    public async Task ConcurrentWriteAndDispose_DoesNotThrow()
+    {
+        var sink = new CsvLineSink(_tempDir, "concurrent");
+        var ts = DateTimeOffset.UtcNow;
+        var exceptions = new ConcurrentBag<Exception>();
+        using var ready = new ManualResetEventSlim(false);
+
+        var writeTask = Task.Run(() =>
+        {
+            ready.Wait();
+            for (int i = 0; i < 200; i++)
+            {
+                try { sink.Write(ts, $"line {i}"); }
+                catch (Exception ex) { exceptions.Add(ex); }
+            }
+        });
+
+        var disposeTask = Task.Run(() =>
+        {
+            ready.Wait();
+            try { sink.Dispose(); }
+            catch (Exception ex) { exceptions.Add(ex); }
+        });
+
+        ready.Set();
+        await Task.WhenAll(writeTask, disposeTask);
+        Assert.Empty(exceptions);
+    }
+
+    [Fact]
+    public void DoubleDispose_DoesNotThrow()
+    {
+        var sink = new CsvLineSink(_tempDir, "double-dispose");
+
+        sink.Dispose();
+        var ex = Record.Exception(() => sink.Dispose());
+
+        Assert.Null(ex);
+    }
+
+    [Fact]
+    public void WriteAfterDispose_IsIgnoredSilently()
+    {
+        var sink = new CsvLineSink(_tempDir, "write-after-dispose");
+        sink.Dispose();
+
+        var ex = Record.Exception(() => sink.Write(DateTimeOffset.UtcNow, "late data"));
+
+        Assert.Null(ex);
     }
 }

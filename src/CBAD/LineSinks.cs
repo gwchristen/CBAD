@@ -9,34 +9,50 @@ internal interface ILineSink : IDisposable
 internal sealed class RawLineSink : ILineSink
 {
     private readonly StreamWriter _writer;
+    private readonly object _lock = new();
+    private bool _disposed;
     public string Path { get; }
 
     public RawLineSink(string outDir, string prefix)
     {
         Directory.CreateDirectory(outDir);
-        Path = System.IO.Path.Combine(outDir, $"{prefix}_{DateTime.Now:yyyyMMdd_HHmmss}.log");
+        Path = System.IO.Path.Combine(outDir, $"{prefix}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.log");
         _writer = new StreamWriter(Path, append: true);
         _writer.AutoFlush = true;
     }
 
     public void Write(DateTimeOffset timestamp, string dataChunk)
     {
-        _writer.Write($"[{timestamp:O}] ");
-        _writer.Write(dataChunk);
+        lock (_lock)
+        {
+            if (_disposed) return;
+            _writer.Write($"[{timestamp:O}] ");
+            _writer.Write(dataChunk);
+        }
     }
 
-    public void Dispose() => _writer.Dispose();
+    public void Dispose()
+    {
+        lock (_lock)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _writer.Dispose();
+        }
+    }
 }
 
 internal sealed class CsvLineSink : ILineSink
 {
     private readonly StreamWriter _writer;
+    private readonly object _lock = new();
+    private bool _disposed;
     public string Path { get; }
 
     public CsvLineSink(string outDir, string prefix)
     {
         Directory.CreateDirectory(outDir);
-        Path = System.IO.Path.Combine(outDir, $"{prefix}_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
+        Path = System.IO.Path.Combine(outDir, $"{prefix}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv");
         _writer = new StreamWriter(Path, append: true);
         _writer.AutoFlush = true;
         _writer.WriteLine("timestamp_utc,data");
@@ -46,13 +62,25 @@ internal sealed class CsvLineSink : ILineSink
     {
         var normalized = dataChunk.Replace("\r\n", "\n").Replace('\r', '\n');
         var lines = normalized.Split('\n');
-        foreach (var line in lines)
+        lock (_lock)
         {
-            if (line.Length == 0) continue;
-            var escaped = line.Replace("\"", "\"\"");
-            _writer.WriteLine($"{timestamp:O},\"{escaped}\"");
+            if (_disposed) return;
+            foreach (var line in lines)
+            {
+                if (line.Length == 0) continue;
+                var escaped = line.Replace("\"", "\"\"");
+                _writer.WriteLine($"{timestamp:O},\"{escaped}\"");
+            }
         }
     }
 
-    public void Dispose() => _writer.Dispose();
+    public void Dispose()
+    {
+        lock (_lock)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _writer.Dispose();
+        }
+    }
 }

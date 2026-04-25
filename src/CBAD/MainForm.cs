@@ -121,7 +121,7 @@ public class MainForm : Form
         btnStart.Text = "Start";
         btnStart.Click += async (_, __) => await StartCaptureAsync();
         btnStop.Text = "Stop";
-        btnStop.Click += (_, __) => StopCapture();
+        btnStop.Click += async (_, __) => await StopCaptureAsync();
 
         chkSimulation.Text = "Demo Mode";
         chkSimulation.AutoSize = true;
@@ -307,7 +307,7 @@ public class MainForm : Form
         catch (Exception ex)
         {
             MessageBox.Show(this, ex.Message, "Cannot start capture", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            StopCapture();
+            await StopCaptureAsync();
         }
     }
 
@@ -335,20 +335,23 @@ public class MainForm : Form
             return;
 
         var stateIdx = record.Station - 1;
-        var state = _states[stateIdx];
+        var capturedRecord = record;
 
-        state.Latest = record;
-
-        state.History.Add(record);
-        if (state.History.Count > 200)
-            state.History.RemoveAt(0);
-
-        state.RawLines.Add(line);
-        if (state.RawLines.Count > 500)
-            state.RawLines.RemoveAt(0);
-
+        // All state mutations and UI updates happen on the UI thread to avoid data races.
         BeginInvoke(() =>
         {
+            var state = _states[stateIdx];
+
+            state.Latest = capturedRecord;
+
+            state.History.Add(capturedRecord);
+            if (state.History.Count > 200)
+                state.History.RemoveAt(0);
+
+            state.RawLines.Add(line);
+            if (state.RawLines.Count > 500)
+                state.RawLines.RemoveAt(0);
+
             _overviewTab.UpdateStation(state);
             _detailTabs[stateIdx].UpdateStation(state);
         });
@@ -366,18 +369,29 @@ public class MainForm : Form
         btnRefreshPorts.Enabled = !sim;
     }
 
-    private void StopCapture()
+    private async Task StopCaptureAsync()
     {
-        try { _cts?.Cancel(); } catch { }
+        var cts = _cts;
+        var captureTask = _captureTask;
+        var sink = _sink;
 
-        _cts?.Dispose();
+        // Clear fields first to prevent re-entry.
         _cts = null;
-
-        try { _captureTask?.Wait(500); } catch { }
         _captureTask = null;
-
-        _sink?.Dispose();
         _sink = null;
+
+        try { cts?.Cancel(); }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Cancel error: {ex.Message}"); }
+        cts?.Dispose();
+
+        if (captureTask is not null)
+        {
+            try { await captureTask; }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Capture task stopped with error: {ex.Message}"); }
+        }
+
+        sink?.Dispose();
 
         SetRunningState(false);
         SetStatus("Stopped");
@@ -416,7 +430,21 @@ public class MainForm : Form
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
-        StopCapture();
+        if (_captureTask is not null)
+        {
+            // Defer close until the capture task has fully stopped to avoid
+            // disposing the sink while the background task may still be writing.
+            e.Cancel = true;
+            _ = StopCaptureAsync().ContinueWith(
+                t =>
+                {
+                    if (t.IsFaulted)
+                        System.Diagnostics.Debug.WriteLine($"StopCaptureAsync error during close: {t.Exception}");
+                    Invoke(Close);
+                },
+                TaskScheduler.Default);
+            return;
+        }
         base.OnFormClosing(e);
     }
 }

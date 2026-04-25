@@ -28,7 +28,6 @@ internal sealed class StationDetailTab : UserControl
 
     // Chart
     private readonly Chart _chart = new();
-    private int _chartPointCount = 0;
 
     // Stream
     private readonly TextBox _txtStream;
@@ -214,20 +213,24 @@ internal sealed class StationDetailTab : UserControl
             _lblParamBlock.Text    = string.IsNullOrEmpty(rec.ParamBlock) ? "—" : rec.ParamBlock;
         }
 
-        // Chart: only plot EventCode=250 records with full param block (voltage + health)
+        // Chart: rebuild from bounded history (capped at 200 entries) so the chart
+        // remains correct when the ring buffer removes oldest entries.
         var chartable = state.History
             .Where(r => r.EventCode == 250 && r.VoltageMv.HasValue)
             .ToList();
-        for (int i = _chartPointCount; i < chartable.Count; i++)
+
+        _chart.Series["Voltage (mV)"].Points.Clear();
+        _chart.Series["Health %"].Points.Clear();
+
+        foreach (var r in chartable)
         {
-            var r = chartable[i];
             double x = r.ReceivedAt.DateTime.ToOADate();
             _chart.Series["Voltage (mV)"].Points.AddXY(x, r.VoltageMv!.Value);
             if (r.HealthCurrent.HasValue)
                 _chart.Series["Health %"].Points.AddXY(x, r.HealthCurrent.Value);
         }
-        _chartPointCount = chartable.Count;
-        if (_chartPointCount > 0)
+
+        if (chartable.Count > 0)
             _chart.ChartAreas["Main"].RecalculateAxesScale();
 
         // Stream: last 15 lines only
