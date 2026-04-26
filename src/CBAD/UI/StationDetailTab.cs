@@ -1,6 +1,6 @@
 using CBAD.Models;
 using CBAD.Parsing;
-using System.Windows.Forms.DataVisualization.Charting;
+using ScottPlot.WinForms;
 
 namespace CBAD.UI;
 
@@ -38,7 +38,7 @@ internal sealed class StationDetailTab : UserControl
     private bool _isDark;
 
     // Chart
-    private readonly Chart _chart = new();
+    private readonly FormsPlot _formsPlot = new() { Dock = DockStyle.Fill };
 
     // Stream
     private readonly TextBox _txtStream;
@@ -185,10 +185,18 @@ internal sealed class StationDetailTab : UserControl
 
     private static void StyleMetricLabel(Label lbl, string caption, string value)
     {
-        lbl.Text = $"{caption}: {value}";
-        lbl.Font = new System.Drawing.Font(SystemFonts.DefaultFont.FontFamily, 9.5f);
+        var icon = caption switch
+        {
+            "Voltage" => "⚡",
+            "Current" => "🔌",
+            "Health"  => "🔋",
+            "Temp"    => "🌡️",
+            _         => "",
+        };
+        lbl.Text = $"{icon} {caption}: {value}";
+        lbl.Font = new System.Drawing.Font(SystemFonts.DefaultFont.FontFamily, 10.5f, System.Drawing.FontStyle.Bold);
         lbl.AutoSize = true;
-        lbl.Margin = new Padding(0, 0, 20, 0);
+        lbl.Margin = new Padding(0, 0, 24, 0);
     }
 
     private GroupBox BuildAdvancedGroup()
@@ -269,7 +277,7 @@ internal sealed class StationDetailTab : UserControl
 
         // Chart tab
         var chartTab = new TabPage("Chart");
-        chartTab.Controls.Add(_chart);
+        chartTab.Controls.Add(_formsPlot);
         tabs.TabPages.Add(chartTab);
 
         // Stream tab
@@ -286,47 +294,26 @@ internal sealed class StationDetailTab : UserControl
 
     private void BuildChart()
     {
-        var area = new ChartArea("Main");
-        area.BackColor = System.Drawing.Color.WhiteSmoke;
-        area.AxisX.Title = "Time";
-        area.AxisX.LabelStyle.Format = "HH:mm";
-        area.AxisX.IntervalType = DateTimeIntervalType.Minutes;
-        area.AxisX.IntervalAutoMode = IntervalAutoMode.VariableCount;
-        area.AxisX.IsMarginVisible = true;
-        area.AxisX.MajorGrid.LineColor = System.Drawing.Color.LightGray;
-        area.AxisX.MajorGrid.LineDashStyle = ChartDashStyle.Dot;
-        area.AxisY.Title = "Voltage (mV)";
-        area.AxisY.IsStartedFromZero = false;
-        area.AxisY.MajorGrid.LineColor = System.Drawing.Color.LightGray;
-        area.AxisY.MajorGrid.LineDashStyle = ChartDashStyle.Dot;
-        area.AxisY2.Title = "Health (%)";
-        area.AxisY2.Minimum = 0;
-        area.AxisY2.Maximum = 100;
-        area.AxisY2.Enabled = AxisEnabled.True;
-        area.AxisY2.MajorGrid.Enabled = false;
-        _chart.ChartAreas.Add(area);
+        var plot = _formsPlot.Plot;
 
-        var voltageSeries = new Series("Voltage (mV)")
-        {
-            ChartType = SeriesChartType.Line,
-            Color = System.Drawing.Color.DeepSkyBlue,
-            BorderWidth = 2,
-            XValueType = ChartValueType.DateTime,
-            YAxisType = AxisType.Primary,
-        };
-        var healthSeries = new Series("Health %")
-        {
-            ChartType = SeriesChartType.Line,
-            Color = System.Drawing.Color.OrangeRed,
-            BorderWidth = 2,
-            XValueType = ChartValueType.DateTime,
-            YAxisType = AxisType.Secondary,
-        };
-        _chart.Series.Add(voltageSeries);
-        _chart.Series.Add(healthSeries);
-        var legend = new Legend { Docking = Docking.Bottom, IsTextAutoFit = true };
-        _chart.Legends.Add(legend);
-        _chart.Dock = DockStyle.Fill;
+        // Axis labels
+        plot.Axes.Bottom.Label.Text = "Time";
+        plot.Axes.Left.Label.Text   = "Voltage (mV)";
+        plot.Axes.Right.Label.Text  = "Health (%)";
+        plot.Axes.Right.IsVisible   = true;
+
+        // DateTime ticks on the X axis
+        plot.Axes.DateTimeTicksBottom();
+
+        // Grid style
+        plot.Grid.MajorLineColor = ScottPlot.Colors.LightGray.WithAlpha(0.5f);
+
+        // Background
+        plot.FigureBackground.Color = ScottPlot.Colors.WhiteSmoke;
+        plot.DataBackground.Color   = ScottPlot.Colors.White;
+
+        // Show legend
+        plot.ShowLegend();
     }
 
     private void WireExport()
@@ -439,10 +426,10 @@ internal sealed class StationDetailTab : UserControl
                 ? AppTheme.MutedFg(_isDark)
                 : AppTheme.LabelFg(_isDark);
 
-            _lblVoltage.Text = rec.VoltageMv.HasValue    ? $"Voltage: {rec.VoltageMv} mV"    : "Voltage: —";
-            _lblCurrent.Text = rec.CurrentMa.HasValue    ? $"Current: {rec.CurrentMa} mA"    : "Current: —";
-            _lblHealth.Text  = rec.HealthCurrent.HasValue  ? $"Health: {rec.HealthCurrent}%"  : "Health: —";
-            _lblTemp.Text    = rec.TemperatureC.HasValue ? $"Temp: {rec.TemperatureC} °C"    : "Temp: —";
+            _lblVoltage.Text = rec.VoltageMv.HasValue    ? $"⚡ Voltage: {rec.VoltageMv} mV"    : "⚡ Voltage: —";
+            _lblCurrent.Text = rec.CurrentMa.HasValue    ? $"🔌 Current: {rec.CurrentMa} mA"    : "🔌 Current: —";
+            _lblHealth.Text  = rec.HealthCurrent.HasValue  ? $"🔋 Health: {rec.HealthCurrent}%"  : "🔋 Health: —";
+            _lblTemp.Text    = rec.TemperatureC.HasValue ? $"🌡️ Temp: {rec.TemperatureC} °C"    : "🌡️ Temp: —";
             _lblLastUpdate.Text = $"Last update: {rec.ReceivedAt:HH:mm:ss} UTC";
 
             // Advanced section
@@ -464,19 +451,40 @@ internal sealed class StationDetailTab : UserControl
             .Where(r => r.EventCode == 250 && r.VoltageMv.HasValue)
             .ToList();
 
-        _chart.Series["Voltage (mV)"].Points.Clear();
-        _chart.Series["Health %"].Points.Clear();
-
-        foreach (var r in chartable)
-        {
-            double x = r.ReceivedAt.DateTime.ToOADate();
-            _chart.Series["Voltage (mV)"].Points.AddXY(x, r.VoltageMv!.Value);
-            if (r.HealthCurrent.HasValue)
-                _chart.Series["Health %"].Points.AddXY(x, r.HealthCurrent.Value);
-        }
+        var plot = _formsPlot.Plot;
+        plot.Clear();
 
         if (chartable.Count > 0)
-            _chart.ChartAreas["Main"].RecalculateAxesScale();
+        {
+            var voltageXs = chartable.Select(r => r.ReceivedAt.DateTime.ToOADate()).ToArray();
+            var voltageYs = chartable.Select(r => (double)r.VoltageMv!.Value).ToArray();
+            var voltageScatter = plot.Add.Scatter(voltageXs, voltageYs);
+            voltageScatter.LegendText = "Voltage (mV)";
+            voltageScatter.Color      = ScottPlot.Colors.DeepSkyBlue;
+            voltageScatter.LineWidth  = 2;
+            voltageScatter.MarkerSize = 0;
+
+            var healthPoints = chartable.Where(r => r.HealthCurrent.HasValue).ToList();
+            if (healthPoints.Count > 0)
+            {
+                var healthXs = healthPoints.Select(r => r.ReceivedAt.DateTime.ToOADate()).ToArray();
+                var healthYs = healthPoints.Select(r => (double)r.HealthCurrent!.Value).ToArray();
+                var healthScatter = plot.Add.Scatter(healthXs, healthYs);
+                healthScatter.LegendText = "Health (%)";
+                healthScatter.Color      = ScottPlot.Colors.OrangeRed;
+                healthScatter.LineWidth  = 2;
+                healthScatter.MarkerSize = 0;
+                healthScatter.Axes.YAxis = plot.Axes.Right;
+            }
+
+            plot.Axes.AutoScale();
+            // Lock the health axis to 0–100 %
+            plot.Axes.Right.Min = 0;
+            plot.Axes.Right.Max = 100;
+        }
+
+        plot.Axes.DateTimeTicksBottom();
+        _formsPlot.Refresh();
 
         // Stream: update display only when not paused.
         if (!_streamPaused)
