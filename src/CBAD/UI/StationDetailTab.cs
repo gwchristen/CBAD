@@ -77,17 +77,19 @@ internal sealed class StationDetailTab : UserControl
         WireExport();
 
         // ── Outer split: essentials+details (top) | chart+stream (bottom) ──
-        // Panel1 is fixed to ensure the Additional Details card is always fully
-        // visible without needing a scrollbar; Panel2MinSize ensures the chart
-        // always has visible space.
+        // Panel1 is fixed so the Essentials + Additional Details card is always
+        // fully visible without needing to scroll.  SplitterDistance/Panel1MinSize
+        // are set large enough to accommodate all rows of the Additional Details
+        // table comfortably; Panel2MinSize ensures the chart always has visible
+        // space below.
         var outer = new SplitContainer
         {
             Dock = DockStyle.Fill,
             Orientation = Orientation.Horizontal,
-            SplitterDistance = 380,
+            SplitterDistance = 400,
             FixedPanel = FixedPanel.Panel1,
             IsSplitterFixed = true,
-            Panel1MinSize = 380,
+            Panel1MinSize = 400,
             Panel2MinSize = 150,
         };
         outer.Panel1.Controls.Add(BuildEssentialsPanel());
