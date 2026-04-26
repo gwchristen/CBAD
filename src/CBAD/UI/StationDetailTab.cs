@@ -76,24 +76,20 @@ internal sealed class StationDetailTab : UserControl
         BuildChart();
         WireExport();
 
-        // ── Outer split: essentials+details (top) | chart+stream (bottom) ──
-        // Panel1 is fixed so the Essentials + Additional Details card is always
-        // fully visible without needing to scroll.  SplitterDistance/Panel1MinSize
-        // are set large enough to accommodate all rows of the Additional Details
-        // table comfortably; Panel2MinSize ensures the chart always has visible
-        // space below.
-        var outer = new SplitContainer
+        // ── Outer layout: essentials (top, auto-sized) | chart+stream (bottom, fills remaining) ──
+        // TableLayoutPanel avoids the WinForms SplitContainer lifecycle problem where
+        // SplitterDistance is silently clamped before the control has actual dimensions.
+        var outer = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            Orientation = Orientation.Horizontal,
-            SplitterDistance = 400,
-            FixedPanel = FixedPanel.Panel1,
-            IsSplitterFixed = true,
-            Panel1MinSize = 400,
-            Panel2MinSize = 150,
+            ColumnCount = 1,
+            RowCount = 2,
         };
-        outer.Panel1.Controls.Add(BuildEssentialsPanel());
-        outer.Panel2.Controls.Add(BuildChartStreamTabs());
+        outer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        outer.RowStyles.Add(new RowStyle(SizeType.AutoSize));       // essentials: auto-height
+        outer.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));  // chart/stream: fills rest
+        outer.Controls.Add(BuildEssentialsPanel(), 0, 0);
+        outer.Controls.Add(BuildChartStreamTabs(), 0, 1);
 
         Controls.Add(outer);
     }
@@ -103,7 +99,8 @@ internal sealed class StationDetailTab : UserControl
     {
         var panel = new Panel
         {
-            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             BackColor = System.Drawing.Color.FromArgb(245, 247, 250),
             Padding = new Padding(14, 10, 14, 10),
         };
@@ -167,23 +164,23 @@ internal sealed class StationDetailTab : UserControl
         // Additional details GroupBox
         var advGroup = BuildAdvancedGroup();
 
-        // Use a single-column TableLayoutPanel so every row — including the
-        // GroupBox — spans the full available width (unlike TopDown FlowLayout
-        // which does not stretch children horizontally by default).
+        // Use a single-column AutoSize TableLayoutPanel so every row sizes to its
+        // content height, which in turn lets the parent panel auto-size correctly.
         var layout = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             ColumnCount = 1,
             BackColor = System.Drawing.Color.Transparent,
             Padding = new Padding(0),
         };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // heading
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // battery id
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // status row
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // metrics
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // last update
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // adv group — fills remaining
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // adv group
 
         layout.Controls.Add(_lblStationBig,  0, 0);
         layout.Controls.Add(_lblBatteryId,   0, 1);
@@ -233,25 +230,26 @@ internal sealed class StationDetailTab : UserControl
         var group = new GroupBox
         {
             Text = "Additional Details",
-            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             Padding = new Padding(8, 2, 8, 8),
             Margin = new Padding(0, 4, 0, 4),
         };
 
-        // Use Percent 50/50 for value columns so they expand to fill the full
-        // GroupBox width (previously 28/28 left 44 % of horizontal space unused).
-        // Dock = Fill on the table (rather than AutoSize + DockTop) ensures the
-        // Percent column widths are calculated against the actual GroupBox width.
+        // All four columns are AutoSize so the table reports its own preferred
+        // width to the parent GroupBox (Percent columns collapse to 0 in an
+        // AutoSize TableLayoutPanel with no external width constraint).
         var table = new TableLayoutPanel
         {
             ColumnCount = 4,
-            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             Padding = new Padding(2),
         };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
         AddPair(table, "Station:",        _lblStation,       "Last Update:",     _lblLastUpdateAdv);
         AddPair(table, "Date:",           _lblDate,          "Time:",            _lblTime);
