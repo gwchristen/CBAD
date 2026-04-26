@@ -3,6 +3,7 @@ using System.IO.Ports;
 using System.Text;
 using CBAD.Simulation;
 using CBAD.UI;
+using CBAD.WebServer;
 
 namespace CBAD;
 
@@ -30,6 +31,7 @@ internal class MainForm : Form
     private readonly Label _lblStatusDot    = new() { AutoSize = false, Width = 14, Height = 14, Margin = new Padding(0, 2, 8, 0) };
     private readonly Label _lblStatusState  = new() { AutoSize = true, Margin = new Padding(0, 0, 10, 0) };
     private readonly Label _lblStatusDetail = new() { AutoSize = true, Margin = new Padding(0, 0, 3, 0) };
+    private readonly Label _lblWebUrl       = new() { AutoSize = true, Margin = new Padding(16, 0, 3, 0) };
     private CaptureLifecycleState _lifecycleState = CaptureLifecycleState.Idle;
 
     // Settings panel toggle
@@ -48,6 +50,9 @@ internal class MainForm : Form
     // Station state manager — holds ring-buffer history; owns parse + update logic.
     private readonly StationStateManager _stateManager = new();
 
+    // Embedded web dashboard server for remote monitoring.
+    private readonly DashboardServer _dashboardServer;
+
     // Tab UI references
     private OverviewTab _overviewTab = null!;
     private StationDetailTab[] _detailTabs = null!;
@@ -62,6 +67,8 @@ internal class MainForm : Form
         Height = 950;
         MinimumSize = new Size(1100, 750);
         StartPosition = FormStartPosition.CenterScreen;
+
+        _dashboardServer = new DashboardServer(_stateManager);
 
         BuildUi();
         LoadDefaults();
@@ -80,6 +87,22 @@ internal class MainForm : Form
 
         RefreshPorts();
         SetRunningState(false);
+
+        // Start the embedded web dashboard and update the URL label.
+        try
+        {
+            _dashboardServer.Start();
+            var url = _dashboardServer.GetLocalUrl();
+            _lblWebUrl.Text      = $"🌐 {url}";
+            _lblWebUrl.ForeColor = Color.FromArgb(120, 200, 255);
+            AppLog.Info($"Web dashboard listening on {url}");
+        }
+        catch (Exception ex)
+        {
+            _lblWebUrl.Text      = "🌐 Dashboard unavailable";
+            _lblWebUrl.ForeColor = Color.FromArgb(255, 120, 120);
+            AppLog.Warn($"Could not start web dashboard: {ex.Message}");
+        }
     }
 
     private void BuildUi()
@@ -187,6 +210,7 @@ internal class MainForm : Form
         statusFlow.Controls.Add(_lblStatusDot);
         statusFlow.Controls.Add(_lblStatusState);
         statusFlow.Controls.Add(_lblStatusDetail);
+        statusFlow.Controls.Add(_lblWebUrl);
 
         // Column 2: action controls (right-aligned)
         var toolTip = new ToolTip();
@@ -793,11 +817,28 @@ internal class MainForm : Form
                 {
                     if (t.IsFaulted)
                         System.Diagnostics.Debug.WriteLine($"StopCaptureAsync error during close: {t.Exception}");
-                    Invoke(Close);
+                    return _dashboardServer.DisposeAsync().AsTask().ContinueWith(
+                        dt =>
+                        {
+                            if (dt.IsFaulted)
+                                AppLog.Error("Dashboard server shutdown error", dt.Exception?.InnerException ?? dt.Exception!);
+                            Invoke(Close);
+                        },
+                        TaskScheduler.Default);
                 },
                 TaskScheduler.Default);
             return;
         }
+
+        // Stop the web dashboard gracefully on close; log any failure.
+        _ = _dashboardServer.DisposeAsync().AsTask().ContinueWith(
+            t =>
+            {
+                if (t.IsFaulted)
+                    AppLog.Error("Dashboard server shutdown error", t.Exception?.InnerException ?? t.Exception!);
+            },
+            TaskScheduler.Default);
+
         base.OnFormClosing(e);
     }
 }
