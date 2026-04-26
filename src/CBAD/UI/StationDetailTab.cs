@@ -33,6 +33,9 @@ internal sealed class StationDetailTab : UserControl
 
     // Theming support
     private Panel? _essentialsPanel;
+    private GroupBox? _advGroup;
+    private TableLayoutPanel? _advTable;
+    private bool _isDark;
 
     // Chart
     private readonly Chart _chart = new();
@@ -220,7 +223,43 @@ internal sealed class StationDetailTab : UserControl
         AddPair(table, "Target Cap:",     _lblTargetCap,     "Resistance:",      _lblResistance);
 
         group.Controls.Add(table);
+
+        _advGroup = group;
+        _advTable = table;
+
+        // Custom border painting for dark mode — draws a flat themed border
+        // and title text over the system-rendered GroupBox in dark mode.
+        group.Paint += OnAdvGroupPaint;
+
         return group;
+    }
+
+    private void OnAdvGroupPaint(object? sender, PaintEventArgs e)
+    {
+        if (!_isDark) return;
+
+        var gb = (GroupBox)sender!;
+        var g  = e.Graphics;
+
+        // Measure title text height to find where the top border line sits.
+        var textSize  = g.MeasureString(gb.Text, gb.Font);
+        int borderTop = (int)(textSize.Height / 2);
+
+        // Cover the system-rendered border/background with the theme color.
+        using var bgBrush = new System.Drawing.SolidBrush(gb.BackColor);
+        g.FillRectangle(bgBrush, 0, borderTop, gb.Width, gb.Height - borderTop);
+        g.FillRectangle(bgBrush, 0, 0, gb.Width, borderTop);
+
+        // Draw flat themed border.
+        using var pen = new System.Drawing.Pen(AppTheme.BorderColor(true));
+        g.DrawRectangle(pen, new System.Drawing.Rectangle(0, borderTop, gb.Width - 1, gb.Height - borderTop - 1));
+
+        // Redraw title text with theme foreground color.
+        const float textX = 9f;
+        using var textBgBrush = new System.Drawing.SolidBrush(gb.BackColor);
+        g.FillRectangle(textBgBrush, textX - 2, 0, textSize.Width + 4, textSize.Height);
+        using var textBrush = new System.Drawing.SolidBrush(gb.ForeColor);
+        g.DrawString(gb.Text, gb.Font, textBrush, textX, 0);
     }
 
     // ── Chart + Stream tabs ─────────────────────────────────────────────
@@ -397,8 +436,8 @@ internal sealed class StationDetailTab : UserControl
             _lblStatusDot.BackColor = statusColor;
             _lblStatus.Text      = CadexStatusCodes.Describe(processCodeStr);
             _lblStatus.ForeColor = statusColor == System.Drawing.Color.LightGray
-                ? System.Drawing.Color.DimGray
-                : System.Drawing.Color.FromArgb(40, 40, 40);
+                ? AppTheme.MutedFg(_isDark)
+                : AppTheme.LabelFg(_isDark);
 
             _lblVoltage.Text = rec.VoltageMv.HasValue    ? $"Voltage: {rec.VoltageMv} mV"    : "Voltage: —";
             _lblCurrent.Text = rec.CurrentMa.HasValue    ? $"Current: {rec.CurrentMa} mA"    : "Current: —";
@@ -457,11 +496,49 @@ internal sealed class StationDetailTab : UserControl
     // ── Theming ─────────────────────────────────────────────────────────
     public void ApplyTheme(bool isDark)
     {
+        _isDark = isDark;
+
+        BackColor = AppTheme.PanelBg(isDark);
+
         if (_essentialsPanel != null)
             _essentialsPanel.BackColor = AppTheme.PanelBg(isDark);
 
+        // Essentials section
         _lblStationBig.ForeColor = AppTheme.HeadingFg(isDark);
         _lblBatteryId.ForeColor  = AppTheme.MutedFg(isDark);
+        _lblStatus.ForeColor     = AppTheme.MutedFg(isDark);
+        _lblVoltage.ForeColor    = AppTheme.LabelFg(isDark);
+        _lblCurrent.ForeColor    = AppTheme.LabelFg(isDark);
+        _lblHealth.ForeColor     = AppTheme.LabelFg(isDark);
+        _lblTemp.ForeColor       = AppTheme.LabelFg(isDark);
         _lblLastUpdate.ForeColor = AppTheme.MutedFg(isDark);
+
+        // Advanced detail value labels
+        _lblStation.ForeColor       = AppTheme.LabelFg(isDark);
+        _lblLastUpdateAdv.ForeColor = AppTheme.LabelFg(isDark);
+        _lblDate.ForeColor          = AppTheme.LabelFg(isDark);
+        _lblTime.ForeColor          = AppTheme.LabelFg(isDark);
+        _lblEventCode.ForeColor     = AppTheme.LabelFg(isDark);
+        _lblBatteryType.ForeColor   = AppTheme.LabelFg(isDark);
+        _lblHealthCurrent.ForeColor = AppTheme.LabelFg(isDark);
+        _lblHealthPrev.ForeColor    = AppTheme.LabelFg(isDark);
+        _lblTargetCap.ForeColor     = AppTheme.LabelFg(isDark);
+        _lblResistance.ForeColor    = AppTheme.LabelFg(isDark);
+
+        // GroupBox border/background and its key-label children
+        if (_advGroup != null)
+        {
+            _advGroup.ForeColor = AppTheme.LabelFg(isDark);
+            _advGroup.BackColor = AppTheme.PanelBg(isDark);
+            _advGroup.Invalidate();
+        }
+
+        if (_advTable != null)
+        {
+            _advTable.BackColor = AppTheme.PanelBg(isDark);
+            foreach (Control c in _advTable.Controls)
+                if (c is Label lbl)
+                    lbl.ForeColor = AppTheme.LabelFg(isDark);
+        }
     }
 }
