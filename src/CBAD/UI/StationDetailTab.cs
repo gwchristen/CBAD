@@ -46,7 +46,8 @@ internal sealed class StationDetailTab : UserControl
 
     // Stream
     private readonly TextBox _txtStream;
-    private readonly Button _btnExport = new() { Text = "Export Raw Data…", Dock = DockStyle.Bottom, Height = 30 };
+    private readonly Button _btnExport       = new() { Text = "Export Raw Data…", Dock = DockStyle.Bottom, Height = 30 };
+    private readonly Button _btnClearStation = new() { Text = "🗑  Clear Data", AutoSize = true, Margin = new Padding(16, 0, 0, 0) };
 
     // Stream controls
     private readonly CheckBox _chkAutoScroll  = new() { Text = "Auto-scroll", Checked = true, AutoSize = true, Margin = new Padding(4, 4, 4, 3) };
@@ -75,6 +76,7 @@ internal sealed class StationDetailTab : UserControl
 
         BuildChart();
         WireExport();
+        WireClearStation();
 
         // ── Outer layout: essentials (top, auto-sized) | chart+stream (bottom, fills remaining) ──
         // TableLayoutPanel avoids the WinForms SplitContainer lifecycle problem where
@@ -133,6 +135,7 @@ internal sealed class StationDetailTab : UserControl
         };
         statusRow.Controls.Add(_lblStatusDot);
         statusRow.Controls.Add(_lblStatus);
+        statusRow.Controls.Add(_btnClearStation);
 
         // Key metrics row — icon labels have fixed colors; text labels respond to theme
         StyleIconLabel(_lblVoltageIcon, "⚡", System.Drawing.Color.Gold);
@@ -362,6 +365,64 @@ internal sealed class StationDetailTab : UserControl
             MessageBox.Show(
                 $"Exported {_lastState.RawLines.Count} lines to:{Environment.NewLine}{dlg.FileName}",
                 "Export Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        };
+    }
+
+    private void WireClearStation()
+    {
+        _btnClearStation.Click += (_, __) =>
+        {
+            var confirm = MessageBox.Show(
+                $"Clear all captured data for Station {_station}?{Environment.NewLine}This cannot be undone.",
+                "Clear Station Data",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+
+            if (confirm != DialogResult.Yes) return;
+
+            // Clear the shared state buffers.  Both the button click and
+            // ProcessLine are dispatched on the UI thread (via BeginInvoke in the
+            // serial capture service), so no additional locking is required.
+            if (_lastState is not null)
+            {
+                _lastState.History.Clear();
+                _lastState.RawLines.Clear();
+                _lastState.Latest = null;
+            }
+            _lastState = null;
+
+            // Reset the chart to a clean baseline.  plot.Clear() removes all
+            // plotted series; the axis/grid/background settings from BuildChart()
+            // remain in place and do not need to be reapplied.
+            var plot = _formsPlot.Plot;
+            plot.Clear();
+            _formsPlot.Refresh();
+
+            // Clear the raw stream display.
+            _txtStream.Clear();
+
+            // Reset all UI labels to their default empty states.
+            _lblBatteryId.Text   = "Battery: —";
+            _lblStatusDot.BackColor = System.Drawing.Color.LightGray; // matches initial value in BuildEssentialsPanel
+            _lblStatus.Text      = "No data";
+            _lblStatus.ForeColor = AppTheme.MutedFg(_isDark);
+            _lblVoltage.Text     = "Voltage: —";
+            _lblCurrent.Text     = "Current: —";
+            _lblHealth.Text      = "Health: —";
+            _lblTemp.Text        = "Temp: —";
+            _lblLastUpdate.Text  = "No data yet — connect and start capture";
+
+            // Advanced section labels
+            _lblStation.Text        = "—";
+            _lblLastUpdateAdv.Text  = "—";
+            _lblDate.Text           = "—";
+            _lblTime.Text           = "—";
+            _lblEventCode.Text      = "—";
+            _lblBatteryType.Text    = "—";
+            _lblHealthCurrent.Text  = "—";
+            _lblHealthPrev.Text     = "—";
+            _lblTargetCap.Text      = "—";
+            _lblResistance.Text     = "—";
         };
     }
 
