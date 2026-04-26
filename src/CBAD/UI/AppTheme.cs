@@ -29,12 +29,16 @@ internal static class AppTheme
     public static Color DarkMutedFg       => Color.FromArgb(140, 155, 175);
     public static Color DarkHeadingFg     => Color.FromArgb(130, 170, 220);
 
+    // ── Dark theme borders ───────────────────────────────────────────────
+    public static Color DarkBorderColor      => Color.FromArgb(75, 85, 110);
+
     // ── Convenience accessors ────────────────────────────────────────────
-    public static Color PanelBg(bool dark)   => dark ? DarkPanelBg   : LightPanelBg;
-    public static Color CardBg(bool dark)    => dark ? DarkCardBg    : LightCardBg;
-    public static Color InputBg(bool dark)   => dark ? DarkInputBg   : LightInputBg;
-    public static Color InputFg(bool dark)   => dark ? DarkInputFg   : LightInputFg;
-    public static Color LabelFg(bool dark)   => dark ? DarkLabelFg   : LightLabelFg;
-    public static Color MutedFg(bool dark)   => dark ? DarkMutedFg   : LightMutedFg;
-    public static Color HeadingFg(bool dark) => dark ? DarkHeadingFg : LightHeadingFg;
+    public static Color PanelBg(bool dark)    => dark ? DarkPanelBg    : LightPanelBg;
+    public static Color CardBg(bool dark)     => dark ? DarkCardBg     : LightCardBg;
+    public static Color InputBg(bool dark)    => dark ? DarkInputBg    : LightInputBg;
+    public static Color InputFg(bool dark)    => dark ? DarkInputFg    : LightInputFg;
+    public static Color LabelFg(bool dark)    => dark ? DarkLabelFg    : LightLabelFg;
+    public static Color MutedFg(bool dark)    => dark ? DarkMutedFg    : LightMutedFg;
+    public static Color HeadingFg(bool dark)  => dark ? DarkHeadingFg  : LightHeadingFg;
+    public static Color BorderColor(bool dark) => dark ? DarkBorderColor : SystemColors.ControlDark;
 }

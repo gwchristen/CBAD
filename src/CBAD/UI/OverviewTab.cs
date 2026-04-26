@@ -6,31 +6,32 @@ namespace CBAD.UI;
 internal sealed class OverviewTab : UserControl
 {
     private readonly StationPanel[] _panels = new StationPanel[4];
+    private readonly TableLayoutPanel _grid;
 
     public OverviewTab()
     {
         Dock = DockStyle.Fill;
         Padding = new Padding(8);
 
-        var grid = new TableLayoutPanel
+        _grid = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
             RowCount = 2,
             Padding = new Padding(4),
         };
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        _grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        _grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        _grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        _grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
 
         for (int i = 0; i < 4; i++)
         {
             _panels[i] = new StationPanel(i + 1);
-            grid.Controls.Add(_panels[i], i % 2, i / 2);
+            _grid.Controls.Add(_panels[i], i % 2, i / 2);
         }
 
-        Controls.Add(grid);
+        Controls.Add(_grid);
     }
 
     public void UpdateStation(StationState state)
@@ -40,6 +41,8 @@ internal sealed class OverviewTab : UserControl
 
     public void ApplyTheme(bool isDark)
     {
+        BackColor = AppTheme.PanelBg(isDark);
+        _grid.BackColor = AppTheme.PanelBg(isDark);
         foreach (var p in _panels)
             p.ApplyTheme(isDark);
     }
@@ -55,6 +58,7 @@ internal sealed class OverviewTab : UserControl
         private readonly Label _health;
         private readonly Label _lastUpdate;
         private readonly Label _emptyState;
+        private bool _isDark;
 
         public StationPanel(int station)
         {
@@ -175,7 +179,7 @@ internal sealed class OverviewTab : UserControl
         {
             _statusDot.BackColor = System.Drawing.Color.LightGray;
             _statusText.Text     = "No data";
-            _statusText.ForeColor = System.Drawing.Color.Gray;
+            _statusText.ForeColor = AppTheme.MutedFg(_isDark);
             _voltage.Text    = "Voltage:   —";
             _current.Text    = "Current:   —";
             _temp.Text       = "Temp:      —";
@@ -196,8 +200,8 @@ internal sealed class OverviewTab : UserControl
             _statusDot.BackColor = statusColor;
             _statusText.Text     = CadexStatusCodes.Describe(processCodeStr);
             _statusText.ForeColor = statusColor == System.Drawing.Color.LightGray
-                ? System.Drawing.Color.DimGray
-                : System.Drawing.Color.FromArgb(40, 40, 40);
+                ? AppTheme.MutedFg(_isDark)
+                : AppTheme.LabelFg(_isDark);
 
             _voltage.Text = rec.VoltageMv.HasValue     ? $"Voltage: {rec.VoltageMv} mV"    : "Voltage: —";
             _current.Text = rec.CurrentMa.HasValue     ? $"Current: {rec.CurrentMa} mA"    : "Current: —";
@@ -208,8 +212,10 @@ internal sealed class OverviewTab : UserControl
 
         public void ApplyTheme(bool isDark)
         {
+            _isDark = isDark;
             BackColor = AppTheme.CardBg(isDark);
             _header.ForeColor     = AppTheme.HeadingFg(isDark);
+            _statusText.ForeColor = AppTheme.MutedFg(isDark);
             _voltage.ForeColor    = AppTheme.LabelFg(isDark);
             _current.ForeColor    = AppTheme.LabelFg(isDark);
             _temp.ForeColor       = AppTheme.LabelFg(isDark);
