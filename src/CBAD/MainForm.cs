@@ -58,9 +58,9 @@ internal class MainForm : Form
     public MainForm(AppOptions? startupDefaults = null)
     {
         Text = "CBAD — Battery Analyzer Dashboard";
-        Width = 1200;
-        Height = 800;
-        MinimumSize = new Size(900, 600);
+        Width = 1400;
+        Height = 950;
+        MinimumSize = new Size(1100, 750);
         StartPosition = FormStartPosition.CenterScreen;
 
         BuildUi();

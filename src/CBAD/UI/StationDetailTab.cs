@@ -13,6 +13,10 @@ internal sealed class StationDetailTab : UserControl
     private readonly Label _lblBatteryId   = new() { AutoSize = true };
     private readonly Label _lblStatusDot   = new() { AutoSize = false, Width = 14, Height = 14, Margin = new Padding(0, 3, 8, 0) };
     private readonly Label _lblStatus      = new() { AutoSize = true };
+    private readonly Label _lblVoltageIcon = new() { AutoSize = true };
+    private readonly Label _lblCurrentIcon = new() { AutoSize = true };
+    private readonly Label _lblHealthIcon  = new() { AutoSize = true };
+    private readonly Label _lblTempIcon    = new() { AutoSize = true };
     private readonly Label _lblVoltage     = new() { AutoSize = true };
     private readonly Label _lblCurrent     = new() { AutoSize = true };
     private readonly Label _lblHealth      = new() { AutoSize = true };
@@ -73,14 +77,17 @@ internal sealed class StationDetailTab : UserControl
         WireExport();
 
         // ── Outer split: essentials+details (top) | chart+stream (bottom) ──
-        // Increased distance to show both essentials header and additional details
-        // without scrolling; Panel2MinSize ensures the chart always has visible space.
+        // Panel1 is fixed to ensure the Additional Details card is always fully
+        // visible without needing a scrollbar; Panel2MinSize ensures the chart
+        // always has visible space.
         var outer = new SplitContainer
         {
             Dock = DockStyle.Fill,
             Orientation = Orientation.Horizontal,
-            SplitterDistance = 270,
-            Panel1MinSize = 180,
+            SplitterDistance = 380,
+            FixedPanel = FixedPanel.Panel1,
+            IsSplitterFixed = true,
+            Panel1MinSize = 380,
             Panel2MinSize = 150,
         };
         outer.Panel1.Controls.Add(BuildEssentialsPanel());
@@ -128,7 +135,11 @@ internal sealed class StationDetailTab : UserControl
         statusRow.Controls.Add(_lblStatusDot);
         statusRow.Controls.Add(_lblStatus);
 
-        // Key metrics row
+        // Key metrics row — icon labels have fixed colors; text labels respond to theme
+        StyleIconLabel(_lblVoltageIcon, "⚡", System.Drawing.Color.Gold);
+        StyleIconLabel(_lblCurrentIcon, "🔌", System.Drawing.Color.DeepSkyBlue);
+        StyleIconLabel(_lblHealthIcon,  "🔋", System.Drawing.Color.LimeGreen);
+        StyleIconLabel(_lblTempIcon,    "🌡️", System.Drawing.Color.Tomato);
         StyleMetricLabel(_lblVoltage,  "Voltage",  "—");
         StyleMetricLabel(_lblCurrent,  "Current",  "—");
         StyleMetricLabel(_lblHealth,   "Health",   "—");
@@ -141,10 +152,10 @@ internal sealed class StationDetailTab : UserControl
             WrapContents = false,
             Margin = new Padding(0, 0, 0, 8),
         };
-        metricsFlow.Controls.Add(_lblVoltage);
-        metricsFlow.Controls.Add(_lblCurrent);
-        metricsFlow.Controls.Add(_lblHealth);
-        metricsFlow.Controls.Add(_lblTemp);
+        metricsFlow.Controls.Add(MakeMetricCell(_lblVoltageIcon, _lblVoltage));
+        metricsFlow.Controls.Add(MakeMetricCell(_lblCurrentIcon, _lblCurrent));
+        metricsFlow.Controls.Add(MakeMetricCell(_lblHealthIcon,  _lblHealth));
+        metricsFlow.Controls.Add(MakeMetricCell(_lblTempIcon,    _lblTemp));
 
         // Last update
         _lblLastUpdate.ForeColor = System.Drawing.Color.Gray;
@@ -185,18 +196,34 @@ internal sealed class StationDetailTab : UserControl
 
     private static void StyleMetricLabel(Label lbl, string caption, string value)
     {
-        var icon = caption switch
-        {
-            "Voltage" => "⚡",
-            "Current" => "🔌",
-            "Health"  => "🔋",
-            "Temp"    => "🌡️",
-            _         => "",
-        };
-        lbl.Text = $"{icon} {caption}: {value}";
+        lbl.Text = $"{caption}: {value}";
         lbl.Font = new System.Drawing.Font(SystemFonts.DefaultFont.FontFamily, 10.5f, System.Drawing.FontStyle.Bold);
         lbl.AutoSize = true;
         lbl.Margin = new Padding(0, 0, 24, 0);
+    }
+
+    private static void StyleIconLabel(Label lbl, string icon, System.Drawing.Color color)
+    {
+        lbl.Text = icon;
+        lbl.Font = new System.Drawing.Font("Segoe UI Emoji", 10.5f, System.Drawing.FontStyle.Bold);
+        lbl.ForeColor = color;
+        lbl.AutoSize = true;
+        lbl.Margin = new Padding(0, 0, 4, 0);
+        lbl.BackColor = System.Drawing.Color.Transparent;
+    }
+
+    private static FlowLayoutPanel MakeMetricCell(Label icon, Label text)
+    {
+        var fp = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            BackColor = System.Drawing.Color.Transparent,
+        };
+        fp.Controls.Add(icon);
+        fp.Controls.Add(text);
+        return fp;
     }
 
     private GroupBox BuildAdvancedGroup()
@@ -426,10 +453,10 @@ internal sealed class StationDetailTab : UserControl
                 ? AppTheme.MutedFg(_isDark)
                 : AppTheme.LabelFg(_isDark);
 
-            _lblVoltage.Text = rec.VoltageMv.HasValue    ? $"⚡ Voltage: {rec.VoltageMv} mV"    : "⚡ Voltage: —";
-            _lblCurrent.Text = rec.CurrentMa.HasValue    ? $"🔌 Current: {rec.CurrentMa} mA"    : "🔌 Current: —";
-            _lblHealth.Text  = rec.HealthCurrent.HasValue  ? $"🔋 Health: {rec.HealthCurrent}%"  : "🔋 Health: —";
-            _lblTemp.Text    = rec.TemperatureC.HasValue ? $"🌡️ Temp: {rec.TemperatureC} °C"    : "🌡️ Temp: —";
+            _lblVoltage.Text = rec.VoltageMv.HasValue    ? $"Voltage: {rec.VoltageMv} mV"    : "Voltage: —";
+            _lblCurrent.Text = rec.CurrentMa.HasValue    ? $"Current: {rec.CurrentMa} mA"    : "Current: —";
+            _lblHealth.Text  = rec.HealthCurrent.HasValue  ? $"Health: {rec.HealthCurrent}%"  : "Health: —";
+            _lblTemp.Text    = rec.TemperatureC.HasValue ? $"Temp: {rec.TemperatureC} °C"    : "Temp: —";
             _lblLastUpdate.Text = $"Last update: {rec.ReceivedAt:HH:mm:ss} UTC";
 
             // Advanced section
