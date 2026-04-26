@@ -1,3 +1,4 @@
+using CBAD.Parsing;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
@@ -94,7 +95,7 @@ internal sealed class DashboardServer : IAsyncDisposable
                 summaries[i - 1] = new StationSummary(
                     StationId:    state.Station,
                     BatteryId:    r?.BatteryId ?? string.Empty,
-                    Status:       r?.ProcessCode,
+                    Status:       CadexStatusCodes.Describe(r?.ProcessCode?.ToString()),
                     VoltageMv:    r?.VoltageMv,
                     CurrentMa:    r?.CurrentMa,
                     HealthCurrent:  r?.HealthCurrent,
@@ -132,7 +133,7 @@ internal sealed class DashboardServer : IAsyncDisposable
     private sealed record StationSummary(
         int StationId,
         string BatteryId,
-        int? Status,
+        string Status,
         int? VoltageMv,
         int? CurrentMa,
         int? HealthCurrent,
@@ -370,8 +371,7 @@ internal sealed class DashboardServer : IAsyncDisposable
               if (!lastUpdate) return { text: 'No Data', cls: 'idle' };
               const age = (Date.now() - new Date(lastUpdate)) / 1000;
               if (age > 60) return { text: 'Stale', cls: 'warning' };
-              if (status == null) return { text: 'Active', cls: 'active' };
-              return { text: `Code ${status}`, cls: 'active' };
+              return { text: status || 'Active', cls: 'active' };
             }
 
             function metricHtml(label, val) {
