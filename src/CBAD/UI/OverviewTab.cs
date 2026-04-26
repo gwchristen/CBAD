@@ -65,7 +65,7 @@ internal sealed class OverviewTab : UserControl
             Dock = DockStyle.Fill;
             BorderStyle = BorderStyle.FixedSingle;
             BackColor = System.Drawing.Color.White;
-            Padding = new Padding(14, 10, 14, 10);
+            Padding = new Padding(16, 12, 16, 12);
             Margin = new Padding(4);
 
             _header = new Label
@@ -102,10 +102,10 @@ internal sealed class OverviewTab : UserControl
             statusRow.Controls.Add(_statusText);
 
             // Metric labels
-            _voltage    = MakeMetricLabel("Voltage:", "—");
-            _current    = MakeMetricLabel("Current:", "—");
-            _temp       = MakeMetricLabel("Temp:", "—");
-            _health     = MakeMetricLabel("Health:", "—");
+            _voltage    = MakeMetricLabel("⚡ Voltage:", "—");
+            _current    = MakeMetricLabel("🔌 Current:", "—");
+            _temp       = MakeMetricLabel("🌡️ Temp:", "—");
+            _health     = MakeMetricLabel("🔋 Health:", "—");
             _lastUpdate = new Label
             {
                 AutoSize = true,
@@ -172,7 +172,8 @@ internal sealed class OverviewTab : UserControl
         {
             Text = $"{caption}  {value}",
             AutoSize = true,
-            Margin = new Padding(0, 0, 12, 4),
+            Font = new System.Drawing.Font(SystemFonts.DefaultFont.FontFamily, 10.5f, System.Drawing.FontStyle.Bold),
+            Margin = new Padding(0, 0, 12, 6),
         };
 
         private void ResetToNoData()
@@ -180,10 +181,10 @@ internal sealed class OverviewTab : UserControl
             _statusDot.BackColor = System.Drawing.Color.LightGray;
             _statusText.Text     = "No data";
             _statusText.ForeColor = AppTheme.MutedFg(_isDark);
-            _voltage.Text    = "Voltage:   —";
-            _current.Text    = "Current:   —";
-            _temp.Text       = "Temp:      —";
-            _health.Text     = "Health:    —";
+            _voltage.Text    = "⚡ Voltage:   —";
+            _current.Text    = "🔌 Current:   —";
+            _temp.Text       = "🌡️ Temp:      —";
+            _health.Text     = "🔋 Health:    —";
             _lastUpdate.Text = string.Empty;
             _emptyState.Visible = true;
         }
@@ -203,10 +204,10 @@ internal sealed class OverviewTab : UserControl
                 ? AppTheme.MutedFg(_isDark)
                 : AppTheme.LabelFg(_isDark);
 
-            _voltage.Text = rec.VoltageMv.HasValue     ? $"Voltage: {rec.VoltageMv} mV"    : "Voltage: —";
-            _current.Text = rec.CurrentMa.HasValue     ? $"Current: {rec.CurrentMa} mA"    : "Current: —";
-            _temp.Text    = rec.TemperatureC.HasValue  ? $"Temp: {rec.TemperatureC} °C"    : "Temp: —";
-            _health.Text  = rec.HealthCurrent.HasValue ? $"Health: {rec.HealthCurrent}%"   : "Health: —";
+            _voltage.Text = rec.VoltageMv.HasValue     ? $"⚡ Voltage: {rec.VoltageMv} mV"    : "⚡ Voltage: —";
+            _current.Text = rec.CurrentMa.HasValue     ? $"🔌 Current: {rec.CurrentMa} mA"    : "🔌 Current: —";
+            _temp.Text    = rec.TemperatureC.HasValue  ? $"🌡️ Temp: {rec.TemperatureC} °C"    : "🌡️ Temp: —";
+            _health.Text  = rec.HealthCurrent.HasValue ? $"🔋 Health: {rec.HealthCurrent}%"   : "🔋 Health: —";
             _lastUpdate.Text = $"Updated {rec.ReceivedAt:HH:mm:ss} UTC";
         }
 
