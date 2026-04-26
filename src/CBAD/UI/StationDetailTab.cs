@@ -232,24 +232,29 @@ internal sealed class StationDetailTab : UserControl
             Text = "Additional Details",
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Padding = new Padding(8, 2, 8, 8),
+            Padding = new Padding(8, 16, 8, 8),
             Margin = new Padding(0, 4, 0, 4),
         };
 
         // All four columns are AutoSize so the table reports its own preferred
         // width to the parent GroupBox (Percent columns collapse to 0 in an
         // AutoSize TableLayoutPanel with no external width constraint).
+        const int rowCount = 5;
         var table = new TableLayoutPanel
         {
             ColumnCount = 4,
+            RowCount = rowCount,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Dock = DockStyle.Top,
             Padding = new Padding(2),
         };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        for (int i = 0; i < rowCount; i++)
+            table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         AddPair(table, "Station:",        _lblStation,       "Last Update:",     _lblLastUpdateAdv);
         AddPair(table, "Date:",           _lblDate,          "Time:",            _lblTime);
