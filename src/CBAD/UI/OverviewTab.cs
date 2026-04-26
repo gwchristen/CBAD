@@ -52,6 +52,10 @@ internal sealed class OverviewTab : UserControl
         private readonly Label _header;
         private readonly Label _statusDot;
         private readonly Label _statusText;
+        private readonly Label _voltageIcon;
+        private readonly Label _currentIcon;
+        private readonly Label _tempIcon;
+        private readonly Label _healthIcon;
         private readonly Label _voltage;
         private readonly Label _current;
         private readonly Label _temp;
@@ -101,11 +105,15 @@ internal sealed class OverviewTab : UserControl
             statusRow.Controls.Add(_statusDot);
             statusRow.Controls.Add(_statusText);
 
-            // Metric labels
-            _voltage    = MakeMetricLabel("⚡ Voltage:", "—");
-            _current    = MakeMetricLabel("🔌 Current:", "—");
-            _temp       = MakeMetricLabel("🌡️ Temp:", "—");
-            _health     = MakeMetricLabel("🔋 Health:", "—");
+            // Metric labels — icon separated for fixed color, text responds to theme
+            _voltageIcon = MakeIconLabel("⚡", System.Drawing.Color.Gold);
+            _currentIcon = MakeIconLabel("🔌", System.Drawing.Color.DeepSkyBlue);
+            _tempIcon    = MakeIconLabel("🌡️", System.Drawing.Color.Tomato);
+            _healthIcon  = MakeIconLabel("🔋", System.Drawing.Color.LimeGreen);
+            _voltage    = MakeMetricLabel("Voltage:", "—");
+            _current    = MakeMetricLabel("Current:", "—");
+            _temp       = MakeMetricLabel("Temp:", "—");
+            _health     = MakeMetricLabel("Health:", "—");
             _lastUpdate = new Label
             {
                 AutoSize = true,
@@ -123,10 +131,10 @@ internal sealed class OverviewTab : UserControl
             };
             metricsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             metricsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            metricsGrid.Controls.Add(_voltage, 0, 0);
-            metricsGrid.Controls.Add(_current, 1, 0);
-            metricsGrid.Controls.Add(_health,  0, 1);
-            metricsGrid.Controls.Add(_temp,    1, 1);
+            metricsGrid.Controls.Add(MakeMetricCell(_voltageIcon, _voltage), 0, 0);
+            metricsGrid.Controls.Add(MakeMetricCell(_currentIcon, _current), 1, 0);
+            metricsGrid.Controls.Add(MakeMetricCell(_healthIcon,  _health),  0, 1);
+            metricsGrid.Controls.Add(MakeMetricCell(_tempIcon,    _temp),    1, 1);
 
             _emptyState = new Label
             {
@@ -173,18 +181,43 @@ internal sealed class OverviewTab : UserControl
             Text = $"{caption}  {value}",
             AutoSize = true,
             Font = new System.Drawing.Font(SystemFonts.DefaultFont.FontFamily, 10.5f, System.Drawing.FontStyle.Bold),
-            Margin = new Padding(0, 0, 12, 6),
+            Margin = new Padding(0, 0, 0, 6),
         };
+
+        private static Label MakeIconLabel(string icon, System.Drawing.Color color) => new()
+        {
+            Text = icon,
+            AutoSize = true,
+            Font = new System.Drawing.Font("Segoe UI Emoji", 10.5f, System.Drawing.FontStyle.Bold),
+            ForeColor = color,
+            Margin = new Padding(0, 0, 4, 6),
+            BackColor = System.Drawing.Color.Transparent,
+        };
+
+        private static FlowLayoutPanel MakeMetricCell(Label icon, Label text)
+        {
+            var fp = new FlowLayoutPanel
+            {
+                AutoSize = true,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                Margin = new Padding(0, 0, 12, 0),
+                BackColor = System.Drawing.Color.Transparent,
+            };
+            fp.Controls.Add(icon);
+            fp.Controls.Add(text);
+            return fp;
+        }
 
         private void ResetToNoData()
         {
             _statusDot.BackColor = System.Drawing.Color.LightGray;
             _statusText.Text     = "No data";
             _statusText.ForeColor = AppTheme.MutedFg(_isDark);
-            _voltage.Text    = "⚡ Voltage:   —";
-            _current.Text    = "🔌 Current:   —";
-            _temp.Text       = "🌡️ Temp:      —";
-            _health.Text     = "🔋 Health:    —";
+            _voltage.Text    = "Voltage:   —";
+            _current.Text    = "Current:   —";
+            _temp.Text       = "Temp:      —";
+            _health.Text     = "Health:    —";
             _lastUpdate.Text = string.Empty;
             _emptyState.Visible = true;
         }
@@ -204,10 +237,10 @@ internal sealed class OverviewTab : UserControl
                 ? AppTheme.MutedFg(_isDark)
                 : AppTheme.LabelFg(_isDark);
 
-            _voltage.Text = rec.VoltageMv.HasValue     ? $"⚡ Voltage: {rec.VoltageMv} mV"    : "⚡ Voltage: —";
-            _current.Text = rec.CurrentMa.HasValue     ? $"🔌 Current: {rec.CurrentMa} mA"    : "🔌 Current: —";
-            _temp.Text    = rec.TemperatureC.HasValue  ? $"🌡️ Temp: {rec.TemperatureC} °C"    : "🌡️ Temp: —";
-            _health.Text  = rec.HealthCurrent.HasValue ? $"🔋 Health: {rec.HealthCurrent}%"   : "🔋 Health: —";
+            _voltage.Text = rec.VoltageMv.HasValue     ? $"Voltage: {rec.VoltageMv} mV"    : "Voltage: —";
+            _current.Text = rec.CurrentMa.HasValue     ? $"Current: {rec.CurrentMa} mA"    : "Current: —";
+            _temp.Text    = rec.TemperatureC.HasValue  ? $"Temp: {rec.TemperatureC} °C"    : "Temp: —";
+            _health.Text  = rec.HealthCurrent.HasValue ? $"Health: {rec.HealthCurrent}%"   : "Health: —";
             _lastUpdate.Text = $"Updated {rec.ReceivedAt:HH:mm:ss} UTC";
         }
 
