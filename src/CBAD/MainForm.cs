@@ -27,10 +27,15 @@ internal class MainForm : Form
     private Button btnStop = new();
 
     // Status indicator controls
-    private readonly Label _lblStatusDot    = new() { AutoSize = false, Width = 14, Height = 14, Margin = new Padding(0, 4, 6, 3) };
-    private readonly Label _lblStatusState  = new() { AutoSize = true, Margin = new Padding(0, 4, 8, 3) };
-    private readonly Label _lblStatusDetail = new() { AutoSize = true, Margin = new Padding(0, 4, 3, 3) };
+    private readonly Label _lblStatusDot    = new() { AutoSize = false, Width = 14, Height = 14, Margin = new Padding(0, 2, 8, 0) };
+    private readonly Label _lblStatusState  = new() { AutoSize = true, Margin = new Padding(0, 0, 10, 0) };
+    private readonly Label _lblStatusDetail = new() { AutoSize = true, Margin = new Padding(0, 0, 3, 0) };
     private CaptureLifecycleState _lifecycleState = CaptureLifecycleState.Idle;
+
+    // Settings panel toggle
+    private Panel _settingsPanel = null!;
+    private Button _btnToggleSettings = new();
+    private bool _settingsExpanded = true;
 
     private CancellationTokenSource? _cts;
     private Task? _captureTask;
@@ -43,11 +48,15 @@ internal class MainForm : Form
     private OverviewTab _overviewTab = null!;
     private StationDetailTab[] _detailTabs = null!;
 
+    // Header color shared between header and settings border
+    private static readonly Color HeaderColor = Color.FromArgb(30, 46, 78);
+
     public MainForm(AppOptions? startupDefaults = null)
     {
         Text = "CBAD — Battery Analyzer Dashboard";
         Width = 1200;
         Height = 800;
+        MinimumSize = new Size(900, 600);
         StartPosition = FormStartPosition.CenterScreen;
 
         BuildUi();
@@ -76,81 +85,22 @@ internal class MainForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 2,
-            Padding = new Padding(6)
+            Padding = new Padding(0),
         };
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         Controls.Add(root);
 
-        // ── Top panel: connection controls ──────────────────────────────
+        // ── Top panel ──────────────────────────────────────────────────
         var topPanel = new Panel { Dock = DockStyle.Top, AutoSize = true };
 
-        var grid = new TableLayoutPanel
-        {
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            ColumnCount = 4,
-            RowCount = 6
-        };
-        for (int i = 0; i < 4; i++) grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+        // Settings panel added first → sits below header (last-added = topmost with DockStyle.Top)
+        _settingsPanel = BuildSettingsPanel();
+        topPanel.Controls.Add(_settingsPanel);
 
-        AddLabeled(grid, "Port", cbPort, 0, 0);
-        AddLabeled(grid, "Baud", cbBaud, 1, 0);
-        AddLabeled(grid, "Parity", cbParity, 2, 0);
-        AddLabeled(grid, "Data Bits", cbDataBits, 3, 0);
-        AddLabeled(grid, "Stop Bits", cbStopBits, 0, 2);
-        AddLabeled(grid, "Handshake", cbHandshake, 1, 2);
+        // Header strip added last → sits at the very top
+        topPanel.Controls.Add(BuildHeaderStrip());
 
-        var outDirPanel = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
-        txtOutDir.Width = 280;
-        btnBrowse.Text = "Browse...";
-        btnBrowse.Click += (_, __) => BrowseOutDir();
-        outDirPanel.Controls.Add(txtOutDir);
-        outDirPanel.Controls.Add(btnBrowse);
-        AddLabeled(grid, "Output Folder", outDirPanel, 2, 2);
-        AddLabeled(grid, "File Prefix", txtPrefix, 3, 2);
-
-        chkCsv.Text = "CSV";
-        chkReconnect.Text = "Auto-Reconnect";
-        numReconnectMs.Minimum = 100;
-        numReconnectMs.Maximum = 600000;
-        numReconnectMs.Increment = 100;
-
-        var flags = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
-        flags.Controls.Add(chkCsv);
-        flags.Controls.Add(chkReconnect);
-        flags.Controls.Add(new Label { Text = "Delay (ms)", AutoSize = true, Margin = new Padding(20, 8, 3, 3) });
-        flags.Controls.Add(numReconnectMs);
-        grid.Controls.Add(flags, 0, 4);
-        grid.SetColumnSpan(flags, 4);
-
-        topPanel.Controls.Add(grid);
-
-        var statusBar = BuildStatusBar();
-        topPanel.Controls.Add(statusBar);
-
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(0, 4, 0, 2) };
-        btnRefreshPorts.Text = "Refresh Ports";
-        btnRefreshPorts.Click += (_, __) => RefreshPorts();
-        btnStart.Text = "▶  Start";
-        btnStart.Click += async (_, __) => await StartCaptureAsync();
-        btnStop.Text = "■  Stop";
-        btnStop.Click += async (_, __) => await StopCaptureAsync();
-
-        chkSimulation.Text = "Demo Mode";
-        chkSimulation.AutoSize = true;
-        chkSimulation.Margin = new Padding(12, 5, 3, 3);
-        chkSimulation.CheckedChanged += OnSimulationCheckedChanged;
-
-        var toolTip = new ToolTip();
-        toolTip.SetToolTip(chkSimulation, "Run with simulated Cadex data — no hardware required");
-
-        buttons.Controls.Add(btnRefreshPorts);
-        buttons.Controls.Add(btnStart);
-        buttons.Controls.Add(btnStop);
-        buttons.Controls.Add(chkSimulation);
-
-        topPanel.Controls.Add(buttons);
         root.Controls.Add(topPanel);
 
         // ── Tab control ─────────────────────────────────────────────────
@@ -173,6 +123,261 @@ internal class MainForm : Form
         root.Controls.Add(tabs);
     }
 
+    // ── Header strip: title | status | actions ──────────────────────────
+    private Panel BuildHeaderStrip()
+    {
+        var strip = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 52,
+            BackColor = HeaderColor,
+            Padding = new Padding(0),
+        };
+
+        var table = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 3,
+            RowCount = 1,
+            BackColor = Color.Transparent,
+            Padding = new Padding(10, 0, 8, 0),
+        };
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+        // Column 0: app title
+        var titleLabel = new Label
+        {
+            Text = "CBAD  Battery Analyzer",
+            Font = new Font("Segoe UI", 12f, FontStyle.Bold),
+            ForeColor = Color.White,
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Margin = new Padding(0, 0, 20, 0),
+        };
+
+        // Column 1: live status
+        _lblStatusState.Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold);
+        _lblStatusState.ForeColor = Color.White;
+        _lblStatusDetail.ForeColor = Color.FromArgb(180, 220, 255);
+
+        var statusLabel = new Label
+        {
+            Text = "Status:",
+            AutoSize = true,
+            Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold),
+            ForeColor = Color.FromArgb(160, 190, 225),
+            Margin = new Padding(0, 0, 8, 0),
+        };
+
+        var statusFlow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            BackColor = Color.Transparent,
+            Padding = new Padding(0, 15, 0, 0),
+        };
+        statusFlow.Controls.Add(statusLabel);
+        statusFlow.Controls.Add(_lblStatusDot);
+        statusFlow.Controls.Add(_lblStatusState);
+        statusFlow.Controls.Add(_lblStatusDetail);
+
+        // Column 2: action controls (right-aligned)
+        var toolTip = new ToolTip();
+        toolTip.SetToolTip(chkSimulation, "Run with simulated Cadex data — no hardware required");
+
+        chkSimulation.Text = "Demo Mode";
+        chkSimulation.AutoSize = true;
+        chkSimulation.ForeColor = Color.White;
+        chkSimulation.BackColor = Color.Transparent;
+        chkSimulation.Margin = new Padding(4, 16, 8, 4);
+        chkSimulation.CheckedChanged += OnSimulationCheckedChanged;
+
+        _btnToggleSettings.Text = "⚙ Settings ▾";
+        _btnToggleSettings.AutoSize = true;
+        _btnToggleSettings.Height = 28;
+        _btnToggleSettings.FlatStyle = FlatStyle.Flat;
+        _btnToggleSettings.ForeColor = Color.White;
+        _btnToggleSettings.BackColor = Color.FromArgb(60, 90, 130);
+        _btnToggleSettings.FlatAppearance.BorderColor = Color.FromArgb(90, 130, 180);
+        _btnToggleSettings.Margin = new Padding(4, 12, 8, 12);
+        _btnToggleSettings.Click += (_, __) => ToggleSettings();
+
+        btnStart.Text = "▶  Start";
+        btnStart.Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold);
+        btnStart.Size = new Size(96, 32);
+        btnStart.BackColor = Color.FromArgb(34, 139, 34);
+        btnStart.ForeColor = Color.White;
+        btnStart.FlatStyle = FlatStyle.Flat;
+        btnStart.FlatAppearance.BorderColor = Color.FromArgb(20, 100, 20);
+        btnStart.Margin = new Padding(4, 10, 4, 10);
+        btnStart.Click += async (_, __) => await StartCaptureAsync();
+
+        btnStop.Text = "■  Stop";
+        btnStop.Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold);
+        btnStop.Size = new Size(96, 32);
+        btnStop.BackColor = Color.FromArgb(180, 40, 40);
+        btnStop.ForeColor = Color.White;
+        btnStop.FlatStyle = FlatStyle.Flat;
+        btnStop.FlatAppearance.BorderColor = Color.FromArgb(120, 20, 20);
+        btnStop.Margin = new Padding(4, 10, 6, 10);
+        btnStop.Click += async (_, __) => await StopCaptureAsync();
+
+        var actionsFlow = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            BackColor = Color.Transparent,
+        };
+        actionsFlow.Controls.Add(chkSimulation);
+        actionsFlow.Controls.Add(_btnToggleSettings);
+        actionsFlow.Controls.Add(btnStart);
+        actionsFlow.Controls.Add(btnStop);
+
+        table.Controls.Add(titleLabel, 0, 0);
+        table.Controls.Add(statusFlow, 1, 0);
+        table.Controls.Add(actionsFlow, 2, 0);
+
+        strip.Controls.Add(table);
+        SetLifecycleState(CaptureLifecycleState.Idle);
+        return strip;
+    }
+
+    // ── Settings panel: Connection | Output ─────────────────────────────
+    private Panel BuildSettingsPanel()
+    {
+        var panel = new Panel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            BackColor = Color.FromArgb(245, 247, 250),
+            Padding = new Padding(8, 6, 8, 8),
+        };
+
+        var outerTable = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 2,
+            RowCount = 1,
+            Padding = new Padding(0),
+        };
+        outerTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 56));
+        outerTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 44));
+
+        // ── Left: Connection Settings ────────────────────────────────
+        var connGroup = new GroupBox
+        {
+            Text = "Connection Settings",
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            Padding = new Padding(8, 2, 8, 8),
+        };
+
+        var connGrid = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 4,
+            RowCount = 4,
+        };
+        for (int i = 0; i < 4; i++) connGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+
+        AddLabeled(connGrid, "Port", cbPort, 0, 0);
+        AddLabeled(connGrid, "Baud", cbBaud, 1, 0);
+        AddLabeled(connGrid, "Parity", cbParity, 2, 0);
+        AddLabeled(connGrid, "Data Bits", cbDataBits, 3, 0);
+        AddLabeled(connGrid, "Stop Bits", cbStopBits, 0, 2);
+        AddLabeled(connGrid, "Handshake", cbHandshake, 1, 2);
+
+        btnRefreshPorts.Text = "Refresh Ports";
+        btnRefreshPorts.AutoSize = true;
+        btnRefreshPorts.Margin = new Padding(3, 8, 10, 3);
+        btnRefreshPorts.Click += (_, __) => RefreshPorts();
+        connGrid.Controls.Add(new Label { Text = " ", AutoSize = true, Margin = new Padding(3, 8, 3, 3) }, 2, 2);
+        connGrid.Controls.Add(btnRefreshPorts, 2, 3);
+
+        connGroup.Controls.Add(connGrid);
+
+        // ── Right: Output & Logging ─────────────────────────────────
+        var outGroup = new GroupBox
+        {
+            Text = "Output & Logging",
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            Padding = new Padding(8, 2, 8, 8),
+        };
+
+        var outGrid = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 2,
+            RowCount = 4,
+        };
+        outGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60));
+        outGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
+
+        var outDirPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+        };
+        txtOutDir.Width = 200;
+        btnBrowse.Text = "Browse…";
+        btnBrowse.AutoSize = true;
+        btnBrowse.Margin = new Padding(4, 0, 0, 0);
+        btnBrowse.Click += (_, __) => BrowseOutDir();
+        outDirPanel.Controls.Add(txtOutDir);
+        outDirPanel.Controls.Add(btnBrowse);
+
+        AddLabeled(outGrid, "Output Folder", outDirPanel, 0, 0);
+        AddLabeled(outGrid, "File Prefix", txtPrefix, 1, 0);
+
+        chkCsv.Text = "CSV Output";
+        chkCsv.AutoSize = true;
+        chkReconnect.Text = "Auto-Reconnect";
+        chkReconnect.AutoSize = true;
+        numReconnectMs.Minimum = 100;
+        numReconnectMs.Maximum = 600000;
+        numReconnectMs.Increment = 100;
+        numReconnectMs.Width = 80;
+
+        var flagsRow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+        };
+        flagsRow.Controls.Add(chkCsv);
+        flagsRow.Controls.Add(chkReconnect);
+        flagsRow.Controls.Add(new Label { Text = "Delay (ms):", AutoSize = true, Margin = new Padding(12, 5, 4, 3) });
+        flagsRow.Controls.Add(numReconnectMs);
+        outGrid.Controls.Add(flagsRow, 0, 2);
+        outGrid.SetColumnSpan(flagsRow, 2);
+
+        outGroup.Controls.Add(outGrid);
+
+        outerTable.Controls.Add(connGroup, 0, 0);
+        outerTable.Controls.Add(outGroup, 1, 0);
+        panel.Controls.Add(outerTable);
+        return panel;
+    }
+
+    private void ToggleSettings()
+    {
+        _settingsExpanded = !_settingsExpanded;
+        _settingsPanel.Visible = _settingsExpanded;
+        _btnToggleSettings.Text = _settingsExpanded ? "⚙ Settings ▾" : "⚙ Settings ▸";
+    }
+
     private static void AddLabeled(TableLayoutPanel grid, string label, Control control, int col, int row)
     {
         var lbl = new Label { Text = label, AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
@@ -180,28 +385,6 @@ internal class MainForm : Form
         control.Dock = DockStyle.Top;
         control.Margin = new Padding(3, 3, 10, 8);
         grid.Controls.Add(control, col, row + 1);
-    }
-
-    private FlowLayoutPanel BuildStatusBar()
-    {
-        _lblStatusState.Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold);
-
-        var bar = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            Padding = new Padding(4, 2, 4, 2),
-            BackColor = SystemColors.ControlLight,
-        };
-        bar.Controls.Add(new Label { Text = "Status:", AutoSize = true, Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold), Margin = new Padding(4, 5, 8, 3) });
-        bar.Controls.Add(_lblStatusDot);
-        bar.Controls.Add(_lblStatusState);
-        bar.Controls.Add(_lblStatusDetail);
-
-        SetLifecycleState(CaptureLifecycleState.Idle);
-        return bar;
     }
 
     private void SetLifecycleState(CaptureLifecycleState state, string? detail = null)
@@ -220,8 +403,8 @@ internal class MainForm : Form
         };
         _lblStatusDetail.Text      = detail ?? string.Empty;
         _lblStatusDetail.ForeColor = state == CaptureLifecycleState.Error
-            ? Color.Crimson
-            : SystemColors.ControlText;
+            ? Color.FromArgb(255, 120, 120)
+            : Color.FromArgb(180, 220, 255);
     }
 
     private void LoadDefaults()

@@ -8,18 +8,24 @@ internal sealed class StationDetailTab : UserControl
 {
     private readonly int _station;
 
-    // Detail labels
+    // ── Essentials section labels ───────────────────────────────────────
+    private readonly Label _lblStationBig  = new() { AutoSize = true };
+    private readonly Label _lblBatteryId   = new() { AutoSize = true };
+    private readonly Label _lblStatusDot   = new() { AutoSize = false, Width = 14, Height = 14, Margin = new Padding(0, 3, 8, 0) };
+    private readonly Label _lblStatus      = new() { AutoSize = true };
+    private readonly Label _lblVoltage     = new() { AutoSize = true };
+    private readonly Label _lblCurrent     = new() { AutoSize = true };
+    private readonly Label _lblHealth      = new() { AutoSize = true };
+    private readonly Label _lblTemp        = new() { AutoSize = true };
+    private readonly Label _lblLastUpdate  = new() { AutoSize = true };
+
+    // ── Advanced detail labels ──────────────────────────────────────────
     private readonly Label _lblStation       = new() { AutoSize = true };
-    private readonly Label _lblBatteryId     = new() { AutoSize = true };
-    private readonly Label _lblStatus        = new() { AutoSize = true };
-    private readonly Label _lblLastUpdate    = new() { AutoSize = true };
+    private readonly Label _lblLastUpdateAdv = new() { AutoSize = true };
     private readonly Label _lblDate          = new() { AutoSize = true };
     private readonly Label _lblTime          = new() { AutoSize = true };
     private readonly Label _lblEventCode     = new() { AutoSize = true };
     private readonly Label _lblBatteryType   = new() { AutoSize = true };
-    private readonly Label _lblVoltage       = new() { AutoSize = true };
-    private readonly Label _lblCurrent       = new() { AutoSize = true };
-    private readonly Label _lblTemp          = new() { AutoSize = true };
     private readonly Label _lblHealthCurrent = new() { AutoSize = true };
     private readonly Label _lblHealthPrev    = new() { AutoSize = true };
     private readonly Label _lblTargetCap     = new() { AutoSize = true };
@@ -31,10 +37,10 @@ internal sealed class StationDetailTab : UserControl
 
     // Stream
     private readonly TextBox _txtStream;
-    private readonly Button _btnExport = new() { Text = "Export Raw Data...", Dock = DockStyle.Bottom, Height = 30 };
+    private readonly Button _btnExport = new() { Text = "Export Raw Data…", Dock = DockStyle.Bottom, Height = 30 };
 
     // Stream controls
-    private readonly CheckBox _chkAutoScroll = new() { Text = "Auto-scroll", Checked = true, AutoSize = true, Margin = new Padding(4, 4, 4, 3) };
+    private readonly CheckBox _chkAutoScroll  = new() { Text = "Auto-scroll", Checked = true, AutoSize = true, Margin = new Padding(4, 4, 4, 3) };
     private readonly Button   _btnPauseStream = new() { Text = "⏸  Pause", AutoSize = true, Margin = new Padding(4, 2, 4, 2) };
     private readonly TextBox  _txtFilter      = new() { Width = 160, PlaceholderText = "Filter lines…", Margin = new Padding(4, 2, 4, 2) };
     private bool _streamPaused;
@@ -54,41 +60,172 @@ internal sealed class StationDetailTab : UserControl
             ScrollBars = ScrollBars.Both,
             Dock = DockStyle.Fill,
             Font = new System.Drawing.Font("Consolas", 9),
-            BackColor = System.Drawing.Color.Black,
-            ForeColor = System.Drawing.Color.LimeGreen,
+            BackColor = System.Drawing.Color.FromArgb(18, 24, 36),
+            ForeColor = System.Drawing.Color.FromArgb(130, 210, 130),
         };
 
         BuildChart();
         WireExport();
 
-        var detailPanel = BuildDetailPanel();
-
-        // Stream panel: toolbar at top, stream fill, export at bottom.
-        var streamPanel = new Panel { Dock = DockStyle.Fill };
-        streamPanel.Controls.Add(_txtStream);      // DockStyle.Fill — added first, applied last
-        streamPanel.Controls.Add(_btnExport);      // DockStyle.Bottom
-        streamPanel.Controls.Add(BuildStreamToolbar()); // DockStyle.Top — added last, applied first
-
-        var inner = new SplitContainer
-        {
-            Dock = DockStyle.Fill,
-            Orientation = Orientation.Horizontal,
-        };
-        inner.Panel1.Controls.Add(_chart);
-        inner.Panel2.Controls.Add(streamPanel);
-
+        // ── Outer split: essentials (top, fixed) | chart+stream (bottom) ──
         var outer = new SplitContainer
         {
             Dock = DockStyle.Fill,
             Orientation = Orientation.Horizontal,
-            SplitterDistance = 210,
+            SplitterDistance = 200,
             FixedPanel = FixedPanel.Panel1,
         };
-        outer.Panel1.Controls.Add(detailPanel);
-        outer.Panel2.Controls.Add(inner);
+        outer.Panel1.Controls.Add(BuildEssentialsPanel());
+        outer.Panel2.Controls.Add(BuildChartStreamTabs());
 
         Controls.Add(outer);
-        _lblStation.Text = station.ToString();
+    }
+
+    // ── Essentials panel ───────────────────────────────────────────────
+    private Panel BuildEssentialsPanel()
+    {
+        var panel = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = System.Drawing.Color.FromArgb(245, 247, 250),
+            Padding = new Padding(14, 10, 14, 10),
+        };
+
+        // Station heading
+        _lblStationBig.Font = new System.Drawing.Font("Segoe UI", 14f, System.Drawing.FontStyle.Bold);
+        _lblStationBig.ForeColor = System.Drawing.Color.FromArgb(30, 46, 78);
+        _lblStationBig.Text = $"Station {_station}";
+        _lblStationBig.Margin = new Padding(0, 0, 0, 4);
+
+        // Battery ID
+        _lblBatteryId.Font = new System.Drawing.Font(Font.FontFamily, 9.5f);
+        _lblBatteryId.ForeColor = System.Drawing.Color.Gray;
+        _lblBatteryId.Text = "Battery: —";
+        _lblBatteryId.Margin = new Padding(0, 0, 0, 8);
+
+        // Status row
+        _lblStatusDot.BackColor = System.Drawing.Color.LightGray;
+        _lblStatus.Font = new System.Drawing.Font(Font.FontFamily, 9.5f, System.Drawing.FontStyle.Bold);
+        _lblStatus.Text = "No data";
+        _lblStatus.ForeColor = System.Drawing.Color.Gray;
+
+        var statusRow = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Margin = new Padding(0, 0, 0, 10),
+        };
+        statusRow.Controls.Add(_lblStatusDot);
+        statusRow.Controls.Add(_lblStatus);
+
+        // Key metrics row
+        StyleMetricLabel(_lblVoltage,  "Voltage",  "—");
+        StyleMetricLabel(_lblCurrent,  "Current",  "—");
+        StyleMetricLabel(_lblHealth,   "Health",   "—");
+        StyleMetricLabel(_lblTemp,     "Temp",     "—");
+
+        var metricsFlow = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Margin = new Padding(0, 0, 0, 8),
+        };
+        metricsFlow.Controls.Add(_lblVoltage);
+        metricsFlow.Controls.Add(_lblCurrent);
+        metricsFlow.Controls.Add(_lblHealth);
+        metricsFlow.Controls.Add(_lblTemp);
+
+        // Last update
+        _lblLastUpdate.ForeColor = System.Drawing.Color.Gray;
+        _lblLastUpdate.Font = new System.Drawing.Font(Font.FontFamily, 8.5f);
+        _lblLastUpdate.Text = "No data yet — connect and start capture";
+
+        // Advanced details GroupBox (collapsible via toggle)
+        var advGroup = BuildAdvancedGroup();
+
+        var layout = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoScroll = true,
+            Padding = new Padding(0),
+        };
+        layout.Controls.Add(_lblStationBig);
+        layout.Controls.Add(_lblBatteryId);
+        layout.Controls.Add(statusRow);
+        layout.Controls.Add(metricsFlow);
+        layout.Controls.Add(_lblLastUpdate);
+        layout.Controls.Add(advGroup);
+
+        panel.Controls.Add(layout);
+        return panel;
+    }
+
+    private static void StyleMetricLabel(Label lbl, string caption, string value)
+    {
+        lbl.Text = $"{caption}: {value}";
+        lbl.Font = new System.Drawing.Font(SystemFonts.DefaultFont.FontFamily, 9.5f);
+        lbl.AutoSize = true;
+        lbl.Margin = new Padding(0, 0, 20, 0);
+    }
+
+    private GroupBox BuildAdvancedGroup()
+    {
+        var group = new GroupBox
+        {
+            Text = "Additional Details",
+            AutoSize = true,
+            Dock = DockStyle.Top,
+            Padding = new Padding(8, 2, 8, 8),
+            Margin = new Padding(0, 4, 0, 0),
+        };
+
+        var table = new TableLayoutPanel
+        {
+            ColumnCount = 4,
+            AutoSize = true,
+            Dock = DockStyle.Top,
+            Padding = new Padding(2),
+        };
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
+
+        AddPair(table, "Station:",        _lblStation,       "Last Update:",     _lblLastUpdateAdv);
+        AddPair(table, "Date:",           _lblDate,          "Time:",            _lblTime);
+        AddPair(table, "Event Code:",     _lblEventCode,     "Process Code:",    _lblBatteryType);
+        AddPair(table, "Health Current:", _lblHealthCurrent, "Health Prev:",     _lblHealthPrev);
+        AddPair(table, "Target Cap:",     _lblTargetCap,     "Resistance:",      _lblResistance);
+        AddPair(table, "Param Block:",    _lblParamBlock,    "",                 new Label());
+
+        group.Controls.Add(table);
+        return group;
+    }
+
+    // ── Chart + Stream tabs ─────────────────────────────────────────────
+    private TabControl BuildChartStreamTabs()
+    {
+        var tabs = new TabControl { Dock = DockStyle.Fill };
+
+        // Chart tab
+        var chartTab = new TabPage("Chart");
+        chartTab.Controls.Add(_chart);
+        tabs.TabPages.Add(chartTab);
+
+        // Stream tab
+        var streamTab = new TabPage("Raw Stream");
+        var streamPanel = new Panel { Dock = DockStyle.Fill };
+        streamPanel.Controls.Add(_txtStream);                   // Fill — added first
+        streamPanel.Controls.Add(_btnExport);                   // Bottom
+        streamPanel.Controls.Add(BuildStreamToolbar());         // Top — added last
+        streamTab.Controls.Add(streamPanel);
+        tabs.TabPages.Add(streamTab);
+
+        return tabs;
     }
 
     private void BuildChart()
@@ -210,34 +347,6 @@ internal sealed class StationDetailTab : UserControl
         }
     }
 
-    private Panel BuildDetailPanel()
-    {
-        var table = new TableLayoutPanel
-        {
-            ColumnCount = 4,
-            AutoSize = true,
-            Dock = DockStyle.Top,
-            Padding = new Padding(6),
-        };
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
-
-        AddPair(table, "Station:",        _lblStation,       "Battery ID:",      _lblBatteryId);
-        AddPair(table, "Status:",         _lblStatus,        "Last Update:",     _lblLastUpdate);
-        AddPair(table, "Date:",           _lblDate,          "Time:",            _lblTime);
-        AddPair(table, "Event Code:",     _lblEventCode,     "Process Code:",    _lblBatteryType);
-        AddPair(table, "Voltage:",        _lblVoltage,       "Current:",         _lblCurrent);
-        AddPair(table, "Temperature:",    _lblTemp,          "Health Current:",  _lblHealthCurrent);
-        AddPair(table, "Health Prev:",    _lblHealthPrev,    "Target Cap:",      _lblTargetCap);
-        AddPair(table, "Resistance:",     _lblResistance,    "Param Block:",     _lblParamBlock);
-
-        var panel = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
-        panel.Controls.Add(table);
-        return panel;
-    }
-
     private static void AddPair(TableLayoutPanel t, string lbl1, Control val1, string lbl2, Control val2)
     {
         t.Controls.Add(MakeLabel(lbl1));
@@ -264,22 +373,34 @@ internal sealed class StationDetailTab : UserControl
         if (rec is not null)
         {
             var processCodeStr = rec.ProcessCode?.ToString() ?? "";
-            _lblStation.Text       = rec.Station.ToString();
-            _lblBatteryId.Text     = string.IsNullOrWhiteSpace(rec.BatteryId) ? "(no label)" : rec.BatteryId;
-            _lblStatus.Text        = CadexStatusCodes.Describe(processCodeStr);
-            _lblLastUpdate.Text    = rec.ReceivedAt.ToString("HH:mm:ss UTC");
-            _lblDate.Text          = rec.Timestamp.ToString("MM/dd/yyyy");
-            _lblTime.Text          = rec.Timestamp.ToString("HH:mm:ss");
-            _lblEventCode.Text     = $"{rec.EventCode} ({DescribeEvent(rec.EventCode)})";
-            _lblBatteryType.Text   = processCodeStr == "" ? "—" : $"{processCodeStr} ({CadexStatusCodes.Describe(processCodeStr)})";
-            _lblVoltage.Text       = rec.VoltageMv.HasValue    ? $"{rec.VoltageMv} mV"   : "—";
-            _lblCurrent.Text       = rec.CurrentMa.HasValue    ? $"{rec.CurrentMa} mA"   : "—";
-            _lblTemp.Text          = rec.TemperatureC.HasValue ? $"{rec.TemperatureC} °C" : "—";
-            _lblHealthCurrent.Text = rec.HealthCurrent.HasValue  ? $"{rec.HealthCurrent}%"  : "—";
-            _lblHealthPrev.Text    = rec.HealthPrevious.HasValue ? $"{rec.HealthPrevious}%" : "—";
-            _lblTargetCap.Text     = rec.TargetCapacityPct.HasValue ? $"{rec.TargetCapacityPct}%" : "—";
-            _lblResistance.Text    = rec.ResistanceMOhm.HasValue ? $"{rec.ResistanceMOhm} mΩ" : "—";
-            _lblParamBlock.Text    = string.IsNullOrEmpty(rec.ParamBlock) ? "—" : rec.ParamBlock;
+            var statusColor    = CadexStatusCodes.StatusColor(processCodeStr);
+
+            // Essentials section
+            _lblBatteryId.Text   = string.IsNullOrWhiteSpace(rec.BatteryId) ? "Battery: (no label)" : $"Battery: {rec.BatteryId}";
+            _lblStatusDot.BackColor = statusColor;
+            _lblStatus.Text      = CadexStatusCodes.Describe(processCodeStr);
+            _lblStatus.ForeColor = statusColor == System.Drawing.Color.LightGray
+                ? System.Drawing.Color.DimGray
+                : System.Drawing.Color.FromArgb(40, 40, 40);
+
+            _lblVoltage.Text = rec.VoltageMv.HasValue    ? $"Voltage: {rec.VoltageMv} mV"    : "Voltage: —";
+            _lblCurrent.Text = rec.CurrentMa.HasValue    ? $"Current: {rec.CurrentMa} mA"    : "Current: —";
+            _lblHealth.Text  = rec.HealthCurrent.HasValue  ? $"Health: {rec.HealthCurrent}%"  : "Health: —";
+            _lblTemp.Text    = rec.TemperatureC.HasValue ? $"Temp: {rec.TemperatureC} °C"    : "Temp: —";
+            _lblLastUpdate.Text = $"Last update: {rec.ReceivedAt:HH:mm:ss} UTC";
+
+            // Advanced section
+            _lblStation.Text        = rec.Station.ToString();
+            _lblLastUpdateAdv.Text  = rec.ReceivedAt.ToString("HH:mm:ss UTC");
+            _lblDate.Text           = rec.Timestamp.ToString("MM/dd/yyyy");
+            _lblTime.Text           = rec.Timestamp.ToString("HH:mm:ss");
+            _lblEventCode.Text      = $"{rec.EventCode} ({DescribeEvent(rec.EventCode)})";
+            _lblBatteryType.Text    = processCodeStr == "" ? "—" : $"{processCodeStr} ({CadexStatusCodes.Describe(processCodeStr)})";
+            _lblHealthCurrent.Text  = rec.HealthCurrent.HasValue  ? $"{rec.HealthCurrent}%"  : "—";
+            _lblHealthPrev.Text     = rec.HealthPrevious.HasValue ? $"{rec.HealthPrevious}%" : "—";
+            _lblTargetCap.Text      = rec.TargetCapacityPct.HasValue ? $"{rec.TargetCapacityPct}%" : "—";
+            _lblResistance.Text     = rec.ResistanceMOhm.HasValue ? $"{rec.ResistanceMOhm} mΩ" : "—";
+            _lblParamBlock.Text     = string.IsNullOrEmpty(rec.ParamBlock) ? "—" : rec.ParamBlock;
         }
 
         // Chart: rebuild from bounded history (capped at 200 entries) so the chart
