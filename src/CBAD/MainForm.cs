@@ -37,6 +37,10 @@ internal class MainForm : Form
     private Button _btnToggleSettings = new();
     private bool _settingsExpanded = true;
 
+    // Dark mode toggle
+    private Button _btnDarkMode = new();
+    private bool _isDarkMode = false;
+
     private CancellationTokenSource? _cts;
     private Task? _captureTask;
     private ILineSink? _sink;
@@ -129,7 +133,7 @@ internal class MainForm : Form
         var strip = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 52,
+            Height = 58,
             BackColor = HeaderColor,
             Padding = new Padding(0),
         };
@@ -153,7 +157,6 @@ internal class MainForm : Form
             Font = new Font("Segoe UI", 12f, FontStyle.Bold),
             ForeColor = Color.White,
             AutoSize = true,
-            Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             Margin = new Padding(0, 0, 20, 0),
         };
@@ -196,6 +199,16 @@ internal class MainForm : Form
         chkSimulation.Margin = new Padding(4, 16, 8, 4);
         chkSimulation.CheckedChanged += OnSimulationCheckedChanged;
 
+        _btnDarkMode.Text = "🌙 Dark";
+        _btnDarkMode.AutoSize = true;
+        _btnDarkMode.Height = 28;
+        _btnDarkMode.FlatStyle = FlatStyle.Flat;
+        _btnDarkMode.ForeColor = Color.White;
+        _btnDarkMode.BackColor = Color.FromArgb(55, 70, 100);
+        _btnDarkMode.FlatAppearance.BorderColor = Color.FromArgb(90, 110, 155);
+        _btnDarkMode.Margin = new Padding(4, 12, 4, 12);
+        _btnDarkMode.Click += (_, __) => ApplyTheme(!_isDarkMode);
+
         _btnToggleSettings.Text = "⚙ Settings ▾";
         _btnToggleSettings.AutoSize = true;
         _btnToggleSettings.Height = 28;
@@ -235,6 +248,7 @@ internal class MainForm : Form
             BackColor = Color.Transparent,
         };
         actionsFlow.Controls.Add(chkSimulation);
+        actionsFlow.Controls.Add(_btnDarkMode);
         actionsFlow.Controls.Add(_btnToggleSettings);
         actionsFlow.Controls.Add(btnStart);
         actionsFlow.Controls.Add(btnStop);
@@ -376,6 +390,81 @@ internal class MainForm : Form
         _settingsExpanded = !_settingsExpanded;
         _settingsPanel.Visible = _settingsExpanded;
         _btnToggleSettings.Text = _settingsExpanded ? "⚙ Settings ▾" : "⚙ Settings ▸";
+    }
+
+    // ── Dark mode theming ────────────────────────────────────────────────
+    // Applies a coherent dark or light theme to the main UI surfaces.
+    // Note: native WinForms controls (ComboBox drop-down list, scrollbars,
+    // TabControl tabs) cannot be fully themed without owner-draw overrides,
+    // which is out of scope for this focused PR.
+    private void ApplyTheme(bool isDark)
+    {
+        _isDarkMode = isDark;
+        _btnDarkMode.Text = isDark ? "☀ Light" : "🌙 Dark";
+
+        var formBg  = isDark ? AppTheme.DarkFormBg  : AppTheme.LightFormBg;
+        var panelBg = AppTheme.PanelBg(isDark);
+        var inputBg = AppTheme.InputBg(isDark);
+        var inputFg = AppTheme.InputFg(isDark);
+        var labelFg = AppTheme.LabelFg(isDark);
+        var mutedFg = AppTheme.MutedFg(isDark);
+
+        BackColor = formBg;
+        _settingsPanel.BackColor = panelBg;
+        ApplyThemeToChildren(_settingsPanel, panelBg, inputBg, inputFg, labelFg);
+
+        foreach (var tab in _detailTabs)
+            tab.ApplyTheme(isDark);
+        _overviewTab.ApplyTheme(isDark);
+    }
+
+    private static void ApplyThemeToChildren(
+        Control parent,
+        Color panelBg,
+        Color inputBg,
+        Color inputFg,
+        Color labelFg)
+    {
+        foreach (Control child in parent.Controls)
+        {
+            switch (child)
+            {
+                case ComboBox cb:
+                    cb.BackColor = inputBg;
+                    cb.ForeColor = inputFg;
+                    break;
+                case TextBox tb:
+                    tb.BackColor = inputBg;
+                    tb.ForeColor = inputFg;
+                    break;
+                case NumericUpDown nud:
+                    nud.BackColor = inputBg;
+                    nud.ForeColor = inputFg;
+                    break;
+                case CheckBox chk:
+                    chk.ForeColor = labelFg;
+                    break;
+                case GroupBox gb:
+                    gb.ForeColor = labelFg;
+                    gb.BackColor = panelBg;
+                    break;
+                case Label lbl:
+                    lbl.ForeColor = labelFg;
+                    break;
+                case TableLayoutPanel tlp:
+                    tlp.BackColor = panelBg;
+                    break;
+                case FlowLayoutPanel flp:
+                    flp.BackColor = panelBg;
+                    break;
+                case Panel pnl:
+                    pnl.BackColor = panelBg;
+                    break;
+            }
+
+            if (child.HasChildren)
+                ApplyThemeToChildren(child, panelBg, inputBg, inputFg, labelFg);
+        }
     }
 
     private static void AddLabeled(TableLayoutPanel grid, string label, Control control, int col, int row)

@@ -38,6 +38,12 @@ internal sealed class OverviewTab : UserControl
         _panels[state.Station - 1].Update(state);
     }
 
+    public void ApplyTheme(bool isDark)
+    {
+        foreach (var p in _panels)
+            p.ApplyTheme(isDark);
+    }
+
     private sealed class StationPanel : Panel
     {
         private readonly Label _header;
@@ -129,10 +135,12 @@ internal sealed class OverviewTab : UserControl
 
             var layout = new FlowLayoutPanel
             {
-                Dock = DockStyle.Fill,
+                AutoSize = true,
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
-                AutoScroll = true,
+                // Anchor = None in a TableLayoutPanel cell centers the control
+                // both horizontally and vertically within that cell.
+                Anchor = AnchorStyles.None,
             };
             layout.Controls.Add(_header);
             layout.Controls.Add(statusRow);
@@ -140,7 +148,19 @@ internal sealed class OverviewTab : UserControl
             layout.Controls.Add(_lastUpdate);
             layout.Controls.Add(_emptyState);
 
-            Controls.Add(layout);
+            // Wrapper that centers the layout within the station block
+            var centerWrapper = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 1,
+                BackColor = System.Drawing.Color.Transparent,
+            };
+            centerWrapper.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            centerWrapper.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            centerWrapper.Controls.Add(layout, 0, 0);
+
+            Controls.Add(centerWrapper);
             ResetToNoData();
         }
 
@@ -184,6 +204,18 @@ internal sealed class OverviewTab : UserControl
             _temp.Text    = rec.TemperatureC.HasValue  ? $"Temp: {rec.TemperatureC} °C"    : "Temp: —";
             _health.Text  = rec.HealthCurrent.HasValue ? $"Health: {rec.HealthCurrent}%"   : "Health: —";
             _lastUpdate.Text = $"Updated {rec.ReceivedAt:HH:mm:ss} UTC";
+        }
+
+        public void ApplyTheme(bool isDark)
+        {
+            BackColor = AppTheme.CardBg(isDark);
+            _header.ForeColor     = AppTheme.HeadingFg(isDark);
+            _voltage.ForeColor    = AppTheme.LabelFg(isDark);
+            _current.ForeColor    = AppTheme.LabelFg(isDark);
+            _temp.ForeColor       = AppTheme.LabelFg(isDark);
+            _health.ForeColor     = AppTheme.LabelFg(isDark);
+            _lastUpdate.ForeColor = AppTheme.MutedFg(isDark);
+            _emptyState.ForeColor = AppTheme.MutedFg(isDark);
         }
     }
 }
