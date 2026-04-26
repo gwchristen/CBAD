@@ -30,7 +30,9 @@ internal sealed class StationDetailTab : UserControl
     private readonly Label _lblHealthPrev    = new() { AutoSize = true };
     private readonly Label _lblTargetCap     = new() { AutoSize = true };
     private readonly Label _lblResistance    = new() { AutoSize = true };
-    private readonly Label _lblParamBlock    = new() { AutoSize = true };
+
+    // Theming support
+    private Panel? _essentialsPanel;
 
     // Chart
     private readonly Chart _chart = new();
@@ -67,13 +69,16 @@ internal sealed class StationDetailTab : UserControl
         BuildChart();
         WireExport();
 
-        // ── Outer split: essentials (top, fixed) | chart+stream (bottom) ──
+        // ── Outer split: essentials+details (top) | chart+stream (bottom) ──
+        // Increased distance to show both essentials header and additional details
+        // without scrolling; Panel2MinSize ensures the chart always has visible space.
         var outer = new SplitContainer
         {
             Dock = DockStyle.Fill,
             Orientation = Orientation.Horizontal,
-            SplitterDistance = 200,
-            FixedPanel = FixedPanel.Panel1,
+            SplitterDistance = 270,
+            Panel1MinSize = 180,
+            Panel2MinSize = 150,
         };
         outer.Panel1.Controls.Add(BuildEssentialsPanel());
         outer.Panel2.Controls.Add(BuildChartStreamTabs());
@@ -90,6 +95,7 @@ internal sealed class StationDetailTab : UserControl
             BackColor = System.Drawing.Color.FromArgb(245, 247, 250),
             Padding = new Padding(14, 10, 14, 10),
         };
+        _essentialsPanel = panel;
 
         // Station heading
         _lblStationBig.Font = new System.Drawing.Font("Segoe UI", 14f, System.Drawing.FontStyle.Bold);
@@ -142,23 +148,33 @@ internal sealed class StationDetailTab : UserControl
         _lblLastUpdate.Font = new System.Drawing.Font(Font.FontFamily, 8.5f);
         _lblLastUpdate.Text = "No data yet — connect and start capture";
 
-        // Advanced details GroupBox (collapsible via toggle)
+        // Additional details GroupBox
         var advGroup = BuildAdvancedGroup();
 
-        var layout = new FlowLayoutPanel
+        // Use a single-column TableLayoutPanel so every row — including the
+        // GroupBox — spans the full available width (unlike TopDown FlowLayout
+        // which does not stretch children horizontally by default).
+        var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false,
-            AutoScroll = true,
+            ColumnCount = 1,
+            BackColor = System.Drawing.Color.Transparent,
             Padding = new Padding(0),
         };
-        layout.Controls.Add(_lblStationBig);
-        layout.Controls.Add(_lblBatteryId);
-        layout.Controls.Add(statusRow);
-        layout.Controls.Add(metricsFlow);
-        layout.Controls.Add(_lblLastUpdate);
-        layout.Controls.Add(advGroup);
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // heading
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // battery id
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // status row
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // metrics
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // last update
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // adv group — fills remaining
+
+        layout.Controls.Add(_lblStationBig,  0, 0);
+        layout.Controls.Add(_lblBatteryId,   0, 1);
+        layout.Controls.Add(statusRow,       0, 2);
+        layout.Controls.Add(metricsFlow,     0, 3);
+        layout.Controls.Add(_lblLastUpdate,  0, 4);
+        layout.Controls.Add(advGroup,        0, 5);
 
         panel.Controls.Add(layout);
         return panel;
@@ -177,30 +193,31 @@ internal sealed class StationDetailTab : UserControl
         var group = new GroupBox
         {
             Text = "Additional Details",
-            AutoSize = true,
-            Dock = DockStyle.Top,
+            Dock = DockStyle.Fill,
             Padding = new Padding(8, 2, 8, 8),
-            Margin = new Padding(0, 4, 0, 0),
+            Margin = new Padding(0, 4, 0, 4),
         };
 
+        // Use Percent 50/50 for value columns so they expand to fill the full
+        // GroupBox width (previously 28/28 left 44 % of horizontal space unused).
+        // Dock = Fill on the table (rather than AutoSize + DockTop) ensures the
+        // Percent column widths are calculated against the actual GroupBox width.
         var table = new TableLayoutPanel
         {
             ColumnCount = 4,
-            AutoSize = true,
-            Dock = DockStyle.Top,
+            Dock = DockStyle.Fill,
             Padding = new Padding(2),
         };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
 
         AddPair(table, "Station:",        _lblStation,       "Last Update:",     _lblLastUpdateAdv);
         AddPair(table, "Date:",           _lblDate,          "Time:",            _lblTime);
         AddPair(table, "Event Code:",     _lblEventCode,     "Process Code:",    _lblBatteryType);
         AddPair(table, "Health Current:", _lblHealthCurrent, "Health Prev:",     _lblHealthPrev);
         AddPair(table, "Target Cap:",     _lblTargetCap,     "Resistance:",      _lblResistance);
-        AddPair(table, "Param Block:",    _lblParamBlock,    "",                 new Label());
 
         group.Controls.Add(table);
         return group;
@@ -400,7 +417,6 @@ internal sealed class StationDetailTab : UserControl
             _lblHealthPrev.Text     = rec.HealthPrevious.HasValue ? $"{rec.HealthPrevious}%" : "—";
             _lblTargetCap.Text      = rec.TargetCapacityPct.HasValue ? $"{rec.TargetCapacityPct}%" : "—";
             _lblResistance.Text     = rec.ResistanceMOhm.HasValue ? $"{rec.ResistanceMOhm} mΩ" : "—";
-            _lblParamBlock.Text     = string.IsNullOrEmpty(rec.ParamBlock) ? "—" : rec.ParamBlock;
         }
 
         // Chart: rebuild from bounded history (capped at 200 entries) so the chart
@@ -437,4 +453,15 @@ internal sealed class StationDetailTab : UserControl
         250 => "Normal Processing",
         _   => $"{code} sec elapsed",
     };
+
+    // ── Theming ─────────────────────────────────────────────────────────
+    public void ApplyTheme(bool isDark)
+    {
+        if (_essentialsPanel != null)
+            _essentialsPanel.BackColor = AppTheme.PanelBg(isDark);
+
+        _lblStationBig.ForeColor = AppTheme.HeadingFg(isDark);
+        _lblBatteryId.ForeColor  = AppTheme.MutedFg(isDark);
+        _lblLastUpdate.ForeColor = AppTheme.MutedFg(isDark);
+    }
 }
