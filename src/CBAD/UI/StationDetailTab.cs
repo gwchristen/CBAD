@@ -180,7 +180,7 @@ internal sealed class StationDetailTab : UserControl
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // status row
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // metrics
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // last update
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // adv group
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 180f));  // adv group
 
         layout.Controls.Add(_lblStationBig,  0, 0);
         layout.Controls.Add(_lblBatteryId,   0, 1);
@@ -230,23 +230,17 @@ internal sealed class StationDetailTab : UserControl
         var group = new GroupBox
         {
             Text = "Additional Details",
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Padding = new Padding(8, 16, 8, 8),
+            Dock = DockStyle.Fill,
+            Padding = new Padding(8, 24, 8, 8),
             Margin = new Padding(0, 4, 0, 4),
         };
 
-        // All four columns are AutoSize so the table reports its own preferred
-        // width to the parent GroupBox (Percent columns collapse to 0 in an
-        // AutoSize TableLayoutPanel with no external width constraint).
         const int rowCount = 5;
         var table = new TableLayoutPanel
         {
             ColumnCount = 4,
             RowCount = rowCount,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Dock = DockStyle.Top,
+            Dock = DockStyle.Fill,
             Padding = new Padding(2),
         };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
