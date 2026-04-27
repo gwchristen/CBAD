@@ -19,6 +19,10 @@ internal sealed class CadexRecord
     // 2-field pre-test param block
     public int? TargetCapacityPct  { get; init; }
 
+    // Trailing capacity payload from Normal Processing (event 250) field 8
+    // Format examples: "0", "1\2", "2\2" (measured\cycle or similar Cadex encoding)
+    public string? CapacityPayload { get; init; }
+
     // Health field
     public string HealthField      { get; init; } = string.Empty;
     public int? HealthCurrent      { get; init; }

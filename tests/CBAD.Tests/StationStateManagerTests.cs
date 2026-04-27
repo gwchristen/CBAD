@@ -131,4 +131,26 @@ public class StationStateManagerTests
         // Both are independent record objects even though the raw line is the same.
         Assert.NotSame(first, second);
     }
+
+    [Fact]
+    public void ProcessLine_Event250WithCapacityPayload_SetsTargetCapacity()
+    {
+        var mgr = new StationStateManager();
+        var line = @"0,1,"" "",""04/24/2026"",""141900"",250,""7\1419\-4000\26"",""89\87"",""1\2""";
+
+        mgr.ProcessLine(line);
+
+        Assert.Equal("1\\2", mgr.GetState(1).TargetCapacity);
+    }
+
+    [Fact]
+    public void ProcessLine_Event201WithTargetCapacityPct_SetsTargetCapacity()
+    {
+        var mgr = new StationStateManager();
+        var line = @"0,2,"" "",""01/24/2001"",""085120"",201,""0\80""";
+
+        mgr.ProcessLine(line);
+
+        Assert.Equal("80%", mgr.GetState(2).TargetCapacity);
+    }
 }

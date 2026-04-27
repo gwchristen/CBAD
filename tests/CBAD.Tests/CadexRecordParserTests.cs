@@ -113,6 +113,54 @@ public class CadexRecordParserTests
     }
 
     [Fact]
+    public void NormalEvent250_WithCapacityPayload_ParsedCorrectly()
+    {
+        // Format "measured\cycle" seen in real Cadex C7x00 logs during discharge
+        var line = @"0,1,"" "",""04/24/2026"",""141900"",250,""7\1419\-4000\26"",""89\87"",""1\2""";
+        var rec = CadexRecordParser.TryParse(line, TestTime);
+
+        Assert.NotNull(rec);
+        Assert.Equal(250, rec.EventCode);
+        Assert.Equal("1\\2", rec.CapacityPayload);
+        Assert.Null(rec.ResistanceMOhm);
+    }
+
+    [Fact]
+    public void NormalEvent250_WithSimpleCapacityPayload_ParsedCorrectly()
+    {
+        var line = @"0,1,"" "",""04/24/2026"",""141900"",250,""7\1419\-4000\26"",""89\87"",""0""";
+        var rec = CadexRecordParser.TryParse(line, TestTime);
+
+        Assert.NotNull(rec);
+        Assert.Equal("0", rec.CapacityPayload);
+        Assert.Null(rec.ResistanceMOhm);
+    }
+
+    [Fact]
+    public void OhmTest_Event27_ResistanceStillParsedAfterCapacityChange()
+    {
+        // Ensure OhmTest resistance parsing is unaffected by the capacity payload change
+        var line = @"0,2,""CDX01"",""01/24/2001"",""085456"",27,""0\80"",341";
+        var rec = CadexRecordParser.TryParse(line, TestTime);
+
+        Assert.NotNull(rec);
+        Assert.Equal(27, rec.EventCode);
+        Assert.Equal(341, rec.ResistanceMOhm);
+        Assert.Null(rec.CapacityPayload);
+    }
+
+    [Fact]
+    public void NormalEvent250_NoField8_CapacityPayloadNull()
+    {
+        var line = @"0,1,""          "",""04/24/2026"",""141900"",250,""16\1961\796\26"",""40\45""";
+        var rec = CadexRecordParser.TryParse(line, TestTime);
+
+        Assert.NotNull(rec);
+        Assert.Null(rec.CapacityPayload);
+        Assert.Null(rec.ResistanceMOhm);
+    }
+
+    [Fact]
     public void MalformedLine_ReturnsNull()
     {
         var rec = CadexRecordParser.TryParse("this is not a valid record", TestTime);

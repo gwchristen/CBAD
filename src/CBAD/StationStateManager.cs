@@ -55,6 +55,14 @@ internal sealed class StationStateManager
 
         state.Latest = record;
 
+        // Persist the latest known target/measured capacity string so the UI
+        // can display it even after the record that carried it has scrolled out
+        // of the bounded history ring buffer.
+        if (record.CapacityPayload is not null)
+            state.TargetCapacity = record.CapacityPayload;
+        else if (record.TargetCapacityPct.HasValue)
+            state.TargetCapacity = $"{record.TargetCapacityPct}%";
+
         state.History.Add(record);
         if (state.History.Count > HistoryCapacity)
             state.History.RemoveAt(0);

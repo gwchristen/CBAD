@@ -81,10 +81,19 @@ internal static class CadexRecordParser
             if (hParts.Length >= 2 && int.TryParse(hParts[1].Trim(), out var hp)) healthPrevious = hp;
         }
 
-        // Optional field 8: ResistanceMOhm (OhmTest, event=27)
+        // Optional field 8:
+        //   event 27  → ResistanceMOhm (OhmTest)
+        //   event 250 → CapacityPayload (Target / Measured Capacity string, e.g. "1\2")
         int? resistanceMOhm = null;
-        if (fields.Count > 8 && int.TryParse(fields[8].Trim(), out var res))
-            resistanceMOhm = res;
+        string? capacityPayload = null;
+        if (fields.Count > 8)
+        {
+            var field8 = fields[8].Trim();
+            if (eventCode == 27 && int.TryParse(field8, out var res))
+                resistanceMOhm = res;
+            else if (eventCode == 250 && !string.IsNullOrEmpty(field8))
+                capacityPayload = field8;
+        }
 
         return new CadexRecord
         {
@@ -100,6 +109,7 @@ internal static class CadexRecordParser
             CurrentMa         = currentMa,
             TemperatureC      = temperatureC,
             TargetCapacityPct = targetCapacityPct,
+            CapacityPayload   = capacityPayload,
             HealthField       = healthField,
             HealthCurrent     = healthCurrent,
             HealthPrevious    = healthPrevious,
