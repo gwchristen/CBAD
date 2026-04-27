@@ -44,6 +44,21 @@ internal sealed class StationDetailTab : UserControl
     // Chart
     private readonly FormsPlot _formsPlot = new() { Dock = DockStyle.Fill };
 
+    // Chart interactive controls
+    private ScottPlot.IYAxis? _currentAxis;
+    private ScottPlot.Plottables.Crosshair? _crosshair;
+    private readonly Label _lblChartTooltip = new()
+    {
+        Dock = DockStyle.Bottom,
+        Height = 24,
+        Text = string.Empty,
+        TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
+        Font = new System.Drawing.Font("Consolas", 8.5f),
+        ForeColor = System.Drawing.Color.DimGray,
+        Padding = new Padding(4, 0, 0, 0),
+        Visible = false,
+    };
+
     // Stream
     private readonly TextBox _txtStream;
     private readonly Button _btnExport       = new() { Text = "Export Raw Data…", Dock = DockStyle.Bottom, Height = 30 };
@@ -77,6 +92,7 @@ internal sealed class StationDetailTab : UserControl
         BuildChart();
         WireExport();
         WireClearStation();
+        WireChartMouse();
 
         // ── Outer layout: essentials (top, auto-sized) | chart+stream (bottom, fills remaining) ──
         // TableLayoutPanel avoids the WinForms SplitContainer lifecycle problem where
@@ -306,7 +322,10 @@ internal sealed class StationDetailTab : UserControl
 
         // Chart tab
         var chartTab = new TabPage("Chart");
-        chartTab.Controls.Add(_formsPlot);
+        var chartPanel = new Panel { Dock = DockStyle.Fill };
+        chartPanel.Controls.Add(_formsPlot);         // Fill — added first
+        chartPanel.Controls.Add(_lblChartTooltip);   // Bottom — added after
+        chartTab.Controls.Add(chartPanel);
         tabs.TabPages.Add(chartTab);
 
         // Stream tab
@@ -330,6 +349,10 @@ internal sealed class StationDetailTab : UserControl
         plot.Axes.Left.Label.Text   = "Voltage (mV)";
         plot.Axes.Right.Label.Text  = "Health (%)";
         plot.Axes.Right.IsVisible   = true;
+
+        // Second right axis for Current (mA) — sits to the right of the Health axis
+        _currentAxis = plot.Axes.AddRightAxis();
+        _currentAxis.Label.Text = "Current (mA)";
 
         // DateTime ticks on the X axis
         plot.Axes.DateTimeTicksBottom();
@@ -388,18 +411,25 @@ internal sealed class StationDetailTab : UserControl
                 _lastState.History.Clear();
                 _lastState.RawLines.Clear();
                 _lastState.Latest = null;
+                _lastState.TargetCapacity = null;
             }
             _lastState = null;
 
             // Reset the chart to a clean baseline.  plot.Clear() removes all
-            // plotted series; the axis/grid/background settings from BuildChart()
-            // remain in place and do not need to be reapplied.
+            // plotted series (including the crosshair plottable); the axis/grid/
+            // background settings from BuildChart() remain in place and do not
+            // need to be reapplied.
             var plot = _formsPlot.Plot;
             plot.Clear();
+            _crosshair = null;
             _formsPlot.Refresh();
 
             // Clear the raw stream display.
             _txtStream.Clear();
+
+            // Hide the chart tooltip.
+            _lblChartTooltip.Text    = string.Empty;
+            _lblChartTooltip.Visible = false;
 
             // Reset all UI labels to their default empty states.
             _lblBatteryId.Text   = "Battery: —";
@@ -424,6 +454,59 @@ internal sealed class StationDetailTab : UserControl
             _lblTargetCap.Text      = "—";
             _lblResistance.Text     = "—";
         };
+    }
+
+    private void WireChartMouse()
+    {
+        _formsPlot.MouseMove  += OnFormsPlotMouseMove;
+        _formsPlot.MouseLeave += (_, __) =>
+        {
+            if (_crosshair is not null)
+            {
+                _crosshair.IsVisible = false;
+                _formsPlot.Refresh();
+            }
+            _lblChartTooltip.Text    = string.Empty;
+            _lblChartTooltip.Visible = false;
+        };
+    }
+
+    private void OnFormsPlotMouseMove(object? sender, MouseEventArgs e)
+    {
+        if (_crosshair is null || _lastState is null) return;
+
+        var chartable = _lastState.History
+            .Where(r => r.EventCode == 250 && r.VoltageMv.HasValue)
+            .ToList();
+
+        if (chartable.Count == 0) return;
+
+        var coords = _formsPlot.Plot.GetCoordinates(e.X, e.Y);
+        double mouseX = coords.X;
+
+        // Find the nearest plotted data point to the mouse X position.
+        CadexRecord? nearest = null;
+        double minDist = double.MaxValue;
+        foreach (var r in chartable)
+        {
+            double dist = Math.Abs(r.ReceivedAt.DateTime.ToOADate() - mouseX);
+            if (dist < minDist) { minDist = dist; nearest = r; }
+        }
+
+        if (nearest is null) return;
+
+        _crosshair.X         = nearest.ReceivedAt.DateTime.ToOADate();
+        _crosshair.Y         = (double)nearest.VoltageMv!.Value;
+        _crosshair.IsVisible = true;
+
+        _lblChartTooltip.Text =
+            $"⏱ {nearest.ReceivedAt.DateTime:HH:mm:ss}  |  " +
+            $"V: {(nearest.VoltageMv.HasValue  ? $"{nearest.VoltageMv} mV"       : "—")}  |  " +
+            $"I: {(nearest.CurrentMa.HasValue  ? $"{nearest.CurrentMa} mA"       : "—")}  |  " +
+            $"Health: {(nearest.HealthCurrent.HasValue ? $"{nearest.HealthCurrent}%" : "—")}";
+        _lblChartTooltip.Visible = true;
+
+        _formsPlot.Refresh();
     }
 
     private FlowLayoutPanel BuildStreamToolbar()
@@ -528,9 +611,13 @@ internal sealed class StationDetailTab : UserControl
             _lblBatteryType.Text    = processCodeStr == "" ? "—" : $"{processCodeStr} ({CadexStatusCodes.Describe(processCodeStr)})";
             _lblHealthCurrent.Text  = rec.HealthCurrent.HasValue  ? $"{rec.HealthCurrent}%"  : "—";
             _lblHealthPrev.Text     = rec.HealthPrevious.HasValue ? $"{rec.HealthPrevious}%" : "—";
-            _lblTargetCap.Text      = rec.TargetCapacityPct.HasValue ? $"{rec.TargetCapacityPct}%" : "—";
             _lblResistance.Text     = rec.ResistanceMOhm.HasValue ? $"{rec.ResistanceMOhm} mΩ" : "—";
         }
+
+        // Target / measured capacity: use the state-level value, which is
+        // updated by StationStateManager from every record that carries a
+        // CapacityPayload (event 250 field 8) or TargetCapacityPct (events 201/20).
+        _lblTargetCap.Text = !string.IsNullOrEmpty(state.TargetCapacity) ? state.TargetCapacity : "—";
 
         // Chart: rebuild from bounded history (capped at 200 entries) so the chart
         // remains correct when the ring buffer removes oldest entries.
@@ -564,11 +651,32 @@ internal sealed class StationDetailTab : UserControl
                 healthScatter.Axes.YAxis = plot.Axes.Right;
             }
 
+            // Current (mA) line on the dedicated third axis.
+            var currentPoints = chartable.Where(r => r.CurrentMa.HasValue).ToList();
+            if (currentPoints.Count > 0 && _currentAxis is not null)
+            {
+                var currentXs = currentPoints.Select(r => r.ReceivedAt.DateTime.ToOADate()).ToArray();
+                var currentYs = currentPoints.Select(r => (double)r.CurrentMa!.Value).ToArray();
+                var currentScatter = plot.Add.Scatter(currentXs, currentYs);
+                currentScatter.LegendText = "Current (mA)";
+                currentScatter.Color      = ScottPlot.Colors.Orange;
+                currentScatter.LineWidth  = 2;
+                currentScatter.MarkerSize = 0;
+                currentScatter.Axes.YAxis = _currentAxis;
+            }
+
             plot.Axes.AutoScale();
             // Lock the health axis to 0–100 %
             plot.Axes.Right.Min = 0;
             plot.Axes.Right.Max = 100;
         }
+
+        // Re-add crosshair after plot.Clear() (crosshairs are plottables and are
+        // removed by Clear).  Start hidden; it becomes visible on MouseMove.
+        _crosshair                      = plot.Add.Crosshair(0, 0);
+        _crosshair.IsVisible            = false;
+        _crosshair.HorizontalLine.Color = ScottPlot.Colors.Gray.WithAlpha(0.6f);
+        _crosshair.VerticalLine.Color   = ScottPlot.Colors.Gray.WithAlpha(0.6f);
 
         plot.Axes.DateTimeTicksBottom();
         _formsPlot.Refresh();
@@ -619,6 +727,10 @@ internal sealed class StationDetailTab : UserControl
         _lblHealthPrev.ForeColor    = AppTheme.LabelFg(isDark);
         _lblTargetCap.ForeColor     = AppTheme.LabelFg(isDark);
         _lblResistance.ForeColor    = AppTheme.LabelFg(isDark);
+
+        // Chart tooltip label
+        _lblChartTooltip.ForeColor = AppTheme.MutedFg(isDark);
+        _lblChartTooltip.BackColor = AppTheme.PanelBg(isDark);
 
         // GroupBox border/background and its key-label children
         if (_advGroup != null)
