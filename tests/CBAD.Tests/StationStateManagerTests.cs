@@ -153,4 +153,101 @@ public class StationStateManagerTests
 
         Assert.Equal("80%", mgr.GetState(2).TargetCapacity);
     }
+
+    // ── Failure tracking ─────────────────────────────────────────────────
+
+    [Fact]
+    public void ProcessLine_Code116_AfterCode27_SetsOhmTestFailureReason()
+    {
+        var mgr = new StationStateManager();
+        // Event 27 (OhmTest) with 114 mΩ resistance
+        var ohmLine = @"0,1,""          "",""04/27/2026"",""143257"",27,""7\70"",114";
+        // Event 116 (Program Fail)
+        var failLine = @"0,1,""          "",""04/27/2026"",""143300"",116,""7\70"",""0""";
+
+        mgr.ProcessLine(ohmLine);
+        mgr.ProcessLine(failLine);
+
+        var state = mgr.GetState(1);
+        Assert.NotNull(state.FailureReason);
+        Assert.Contains("Ohm Test Failed", state.FailureReason);
+        Assert.Contains("114 mΩ", state.FailureReason);
+    }
+
+    [Fact]
+    public void ProcessLine_Code116_AfterCode144_SetsChargeTimeoutReason()
+    {
+        var mgr = new StationStateManager();
+        var timeoutLine = @"0,1,""          "",""04/27/2026"",""143257"",144,""2\3943\0\26"",""89\87""";
+        var failLine    = @"0,1,""          "",""04/27/2026"",""143300"",116,""2\3943\0\26"",""89\87""";
+
+        mgr.ProcessLine(timeoutLine);
+        mgr.ProcessLine(failLine);
+
+        Assert.Equal("Charge Timeout", mgr.GetState(1).FailureReason);
+    }
+
+    [Fact]
+    public void ProcessLine_Code116_AfterCode115_SetsTargetCapacityReason()
+    {
+        var mgr = new StationStateManager();
+        var capLine  = @"0,1,""          "",""04/27/2026"",""143257"",115,""7\1419\-401\35"",""85\37""";
+        var failLine = @"0,1,""          "",""04/27/2026"",""143300"",116,""7\1419\-401\35"",""85\37""";
+
+        mgr.ProcessLine(capLine);
+        mgr.ProcessLine(failLine);
+
+        Assert.Equal("Target Capacity Not Met", mgr.GetState(1).FailureReason);
+    }
+
+    [Fact]
+    public void ProcessLine_Code116_NoPrecedingCode_SetsGenericFailure()
+    {
+        var mgr = new StationStateManager();
+        // Send 116 with no preceding non-telemetry event
+        var failLine = @"0,1,""          "",""04/27/2026"",""143300"",116,""2\3943\0\26"",""89\87""";
+
+        mgr.ProcessLine(failLine);
+
+        Assert.Equal("Program Failed", mgr.GetState(1).FailureReason);
+    }
+
+    [Fact]
+    public void ProcessLine_Code116_AfterCode250Only_SetsGenericFailure()
+    {
+        var mgr = new StationStateManager();
+        // Only normal telemetry before the failure
+        mgr.ProcessLine(@"0,1,""          "",""04/24/2026"",""141900"",250,""2\3943\796\26"",""89\87""");
+        mgr.ProcessLine(@"0,1,""          "",""04/27/2026"",""143300"",116,""2\3943\0\26"",""89\87""");
+
+        // 250 lines do not update LastActiveEventCode, so no preceding event is known
+        Assert.Equal("Program Failed", mgr.GetState(1).FailureReason);
+    }
+
+    [Fact]
+    public void ProcessLine_SessionStartCode_ClearsFailureReason()
+    {
+        var mgr = new StationStateManager();
+        // Produce a failure first
+        mgr.ProcessLine(@"0,1,""          "",""04/27/2026"",""143257"",116,""7\70"",""0""");
+        Assert.NotNull(mgr.GetState(1).FailureReason);
+
+        // A new session start (code 20 = Battery Inserted) should clear it
+        mgr.ProcessLine(@"0,1,""          "",""04/27/2026"",""150000"",20,""0\80""");
+        Assert.Null(mgr.GetState(1).FailureReason);
+    }
+
+    [Fact]
+    public void ProcessLine_Code116_DoesNotUpdateLastActiveEventCode()
+    {
+        var mgr = new StationStateManager();
+        var ohmLine  = @"0,1,""          "",""04/27/2026"",""143257"",27,""7\70"",114";
+        var failLine = @"0,1,""          "",""04/27/2026"",""143300"",116,""7\70"",""0""";
+
+        mgr.ProcessLine(ohmLine);
+        mgr.ProcessLine(failLine);
+
+        // LastActiveEventCode should still be 27 (the ohm test), not 116
+        Assert.Equal(27, mgr.GetState(1).LastActiveEventCode);
+    }
 }

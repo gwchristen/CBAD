@@ -101,7 +101,8 @@ internal sealed class DashboardServer : IAsyncDisposable
                     HealthCurrent:  r?.HealthCurrent,
                     HealthPrevious: r?.HealthPrevious,
                     TemperatureC:   r?.TemperatureC,
-                    LastUpdate:     r?.ReceivedAt
+                    LastUpdate:     r?.ReceivedAt,
+                    FailureReason:  state.FailureReason
                 );
             }
             return Results.Json(summaries);
@@ -139,7 +140,8 @@ internal sealed class DashboardServer : IAsyncDisposable
         int? HealthCurrent,
         int? HealthPrevious,
         int? TemperatureC,
-        DateTimeOffset? LastUpdate
+        DateTimeOffset? LastUpdate,
+        string? FailureReason
     );
 
     // ── Embedded HTML dashboard ──────────────────────────────────────────
@@ -252,6 +254,21 @@ internal sealed class DashboardServer : IAsyncDisposable
             .status-badge.active  { background: #14532d; color: var(--green);  }
             .status-badge.idle    { background: #292524; color: var(--muted);   }
             .status-badge.warning { background: #451a03; color: var(--orange);  }
+            .status-badge.fail    { background: #450a0a; color: var(--red);     }
+
+            .card-fail { border-color: var(--red); }
+            .card-fail:hover { border-color: #ff6b6b; }
+
+            .failure-reason {
+              background: #450a0a;
+              border: 1px solid #7f1d1d;
+              border-radius: 6px;
+              color: #fca5a5;
+              font-size: .8rem;
+              font-weight: 600;
+              padding: 6px 10px;
+              margin-bottom: 12px;
+            }
 
             .battery-id {
               font-size: .8rem;
@@ -367,7 +384,8 @@ internal sealed class DashboardServer : IAsyncDisposable
               return { text: String(tc), unit: '°C', cls };
             }
 
-            function statusBadge(status, lastUpdate) {
+            function statusBadge(status, lastUpdate, failureReason) {
+              if (failureReason) return { text: 'FAIL', cls: 'fail' };
               if (!lastUpdate) return { text: 'No Data', cls: 'idle' };
               const age = (Date.now() - new Date(lastUpdate)) / 1000;
               if (age > 60) return { text: 'Stale', cls: 'warning' };
@@ -384,7 +402,7 @@ internal sealed class DashboardServer : IAsyncDisposable
             }
 
             function renderCard(s) {
-              const badge   = statusBadge(s.status, s.lastUpdate);
+              const badge   = statusBadge(s.status, s.lastUpdate, s.failureReason);
               const voltage = fmtVoltage(s.voltageMv);
               const current = fmtCurrent(s.currentMa);
               const health  = fmtHealth(s.healthCurrent, s.healthPrevious);
@@ -394,12 +412,17 @@ internal sealed class DashboardServer : IAsyncDisposable
                 ? new Date(s.lastUpdate).toLocaleTimeString()
                 : 'never';
 
-              return `<div class="card">
+              const failureBanner = s.failureReason
+                ? `<div class="failure-reason">⚠ ${s.failureReason}</div>`
+                : '';
+
+              return `<div class="card${s.failureReason ? ' card-fail' : ''}">
                 <div class="card-header">
                   <span class="station-name">Station ${s.stationId}</span>
                   <span class="status-badge ${badge.cls}">${badge.text}</span>
                 </div>
                 <div class="battery-id">Battery: <span>${s.batteryId || '—'}</span></div>
+                ${failureBanner}
                 <div class="metrics">
                   ${metricHtml('Voltage',  voltage)}
                   ${metricHtml('Current',  current)}

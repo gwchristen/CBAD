@@ -203,5 +203,57 @@ public class CadexRecordParserTests
         Assert.Equal(1416, rec.VoltageMv);
         Assert.Null(rec.TargetCapacityPct);
     }
+
+    [Fact]
+    public void OhmTest_Event27_RealWorldFormat_ResistanceParsedFromField7()
+    {
+        // Real-world Cadex log format: resistance is at field[7] (health field position)
+        // e.g. "0,1,"          ","04/27/2026","143257",27,"7\70",114"
+        var line = @"0,1,""          "",""04/27/2026"",""143257"",27,""7\70"",114";
+        var rec = CadexRecordParser.TryParse(line, TestTime);
+
+        Assert.NotNull(rec);
+        Assert.Equal(27, rec.EventCode);
+        Assert.Equal(114, rec.ResistanceMOhm);
+        Assert.Null(rec.HealthCurrent);
+        Assert.Null(rec.HealthPrevious);
+    }
+
+    [Fact]
+    public void OhmTest_Event28_AutoOhmTest_ResistanceParsed()
+    {
+        var line = @"0,2,""CDX01"",""01/24/2001"",""085456"",28,""2\1416"",275";
+        var rec = CadexRecordParser.TryParse(line, TestTime);
+
+        Assert.NotNull(rec);
+        Assert.Equal(28, rec.EventCode);
+        Assert.Equal(275, rec.ResistanceMOhm);
+        Assert.Null(rec.HealthCurrent);
+    }
+
+    [Fact]
+    public void OhmTest_Event135_HighCellResistance_ResistanceParsed()
+    {
+        var line = @"0,1,""          "",""04/27/2026"",""143257"",135,""7\1419"",480";
+        var rec = CadexRecordParser.TryParse(line, TestTime);
+
+        Assert.NotNull(rec);
+        Assert.Equal(135, rec.EventCode);
+        Assert.Equal(480, rec.ResistanceMOhm);
+        Assert.Null(rec.HealthCurrent);
+    }
+
+    [Fact]
+    public void OhmTest_Event27_HealthFieldNotParsedAsHealth()
+    {
+        // For OhmTest events the health field contains the resistance value, not health %
+        var line = @"0,2,""CDX01"",""01/24/2001"",""085456"",27,""0\80"",341";
+        var rec = CadexRecordParser.TryParse(line, TestTime);
+
+        Assert.NotNull(rec);
+        Assert.Equal(341, rec.ResistanceMOhm);
+        Assert.Null(rec.HealthCurrent);
+        Assert.Null(rec.HealthPrevious);
+    }
 }
 

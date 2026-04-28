@@ -55,6 +55,36 @@ internal sealed class StationStateManager
 
         state.Latest = record;
 
+        // A new battery-service session resets any prior failure reason so the
+        // UI does not persist stale error state from a previous test.
+        if (CadexEventParser.IsSessionStartCode(record.EventCode))
+        {
+            state.FailureReason        = null;
+            state.LastActiveEventCode  = null;
+            state.LastActiveRecord     = null;
+        }
+
+        // Track the most recent non-telemetry event so that when a failure code
+        // arrives the root cause can be identified from the last breadcrumb.
+        if (record.EventCode != 250)
+        {
+            if (CadexEventParser.IsFailureCode(record.EventCode))
+            {
+                // Failure event: derive the reason from the preceding event code.
+                var reason = state.LastActiveEventCode.HasValue
+                    ? CadexEventParser.DetermineFailureReason(
+                          state.LastActiveEventCode.Value, state.LastActiveRecord)
+                    : null;
+
+                state.FailureReason = reason ?? "Program Failed";
+            }
+            else
+            {
+                state.LastActiveEventCode = record.EventCode;
+                state.LastActiveRecord    = record;
+            }
+        }
+
         // Persist the latest known target/measured capacity string so the UI
         // can display it even after the record that carried it has scrolled out
         // of the bounded history ring buffer.
