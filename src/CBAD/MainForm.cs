@@ -38,6 +38,11 @@ internal class MainForm : Form
     private Button _btnDarkMode = new();
     private bool _isDarkMode = false;
 
+    // Quick-access toolbar controls
+    private readonly ComboBox _cbQuickPort = new();
+    private readonly Button   _btnStart    = new();
+    private readonly Button   _btnStop     = new();
+
     private CancellationTokenSource? _cts;
     private Task? _captureTask;
     private ILineSink? _sink;
@@ -132,6 +137,9 @@ internal class MainForm : Form
         };
         statusStrip.Items.Add(_statusStripLabel);
         Controls.Add(statusStrip);
+
+        // ── Quick-access toolbar (just below menu) ────────────────────────
+        Controls.Add(BuildQuickAccessBar());
 
         // ── Header strip ─────────────────────────────────────────────────
         Controls.Add(BuildHeaderStrip());
@@ -247,8 +255,136 @@ internal class MainForm : Form
         return strip;
     }
 
+    // ── Quick-access toolbar: COM port | Refresh | Start | Stop ─────────
+    private Panel BuildQuickAccessBar()
+    {
+        var bar = new Panel
+        {
+            Dock      = DockStyle.Top,
+            Height    = 36,
+            BackColor = Color.FromArgb(45, 58, 82),
+            Padding   = new Padding(6, 0, 6, 0),
+        };
+
+        var flow = new FlowLayoutPanel
+        {
+            Dock          = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents  = false,
+            BackColor     = Color.Transparent,
+        };
+
+        var portLabel = new Label
+        {
+            Text      = "COM Port:",
+            AutoSize  = true,
+            ForeColor = Color.White,
+            Margin    = new Padding(4, 8, 4, 0),
+        };
+
+        _cbQuickPort.Width         = 100;
+        _cbQuickPort.DropDownStyle = ComboBoxStyle.DropDownList;
+        _cbQuickPort.Margin        = new Padding(0, 5, 2, 0);
+        RefreshQuickPorts();
+
+        var btnRefresh = new Button
+        {
+            Text      = "🔄",
+            Width     = 32,
+            Height    = 26,
+            FlatStyle = FlatStyle.Flat,
+            ForeColor = Color.White,
+            BackColor = Color.FromArgb(55, 72, 100),
+            Margin    = new Padding(0, 4, 12, 0),
+        };
+        btnRefresh.FlatAppearance.BorderColor = Color.FromArgb(90, 110, 155);
+        btnRefresh.Click += (_, __) => RefreshQuickPorts();
+
+        _btnStart.Text      = "▶  Start";
+        _btnStart.Font      = new Font(SystemFonts.DefaultFont, FontStyle.Bold);
+        _btnStart.AutoSize  = true;
+        _btnStart.Height    = 26;
+        _btnStart.FlatStyle = FlatStyle.Flat;
+        _btnStart.ForeColor = Color.White;
+        _btnStart.BackColor = Color.FromArgb(34, 139, 34);
+        _btnStart.FlatAppearance.BorderColor = Color.FromArgb(20, 100, 20);
+        _btnStart.Margin    = new Padding(0, 4, 4, 0);
+        _btnStart.Click    += OnQuickStartClicked;
+
+        _btnStop.Text      = "■  Stop";
+        _btnStop.Font      = new Font(SystemFonts.DefaultFont, FontStyle.Bold);
+        _btnStop.AutoSize  = true;
+        _btnStop.Height    = 26;
+        _btnStop.FlatStyle = FlatStyle.Flat;
+        _btnStop.ForeColor = Color.White;
+        _btnStop.BackColor = Color.FromArgb(180, 40, 40);
+        _btnStop.FlatAppearance.BorderColor = Color.FromArgb(120, 20, 20);
+        _btnStop.Margin    = new Padding(0, 4, 0, 0);
+        _btnStop.Click    += (_, __) =>
+            _ = StopCaptureAsync().ContinueWith(
+                t => AppLog.Error("StopCaptureAsync error", t.Exception?.InnerException ?? t.Exception ?? new Exception("Unknown error")),
+                TaskContinuationOptions.OnlyOnFaulted);
+
+        flow.Controls.Add(portLabel);
+        flow.Controls.Add(_cbQuickPort);
+        flow.Controls.Add(btnRefresh);
+        flow.Controls.Add(_btnStart);
+        flow.Controls.Add(_btnStop);
+
+        bar.Controls.Add(flow);
+        return bar;
+    }
+
+    private void RefreshQuickPorts()
+    {
+        var selected = _cbQuickPort.Text;
+        _cbQuickPort.Items.Clear();
+
+        var ports = SerialPort.GetPortNames()
+                              .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+                              .ToArray();
+        _cbQuickPort.Items.AddRange(ports);
+
+        if (!string.IsNullOrWhiteSpace(selected) &&
+            ports.Contains(selected, StringComparer.OrdinalIgnoreCase))
+            _cbQuickPort.Text = selected;
+        else if (!string.IsNullOrWhiteSpace(_currentOptions.Port) &&
+                 ports.Contains(_currentOptions.Port, StringComparer.OrdinalIgnoreCase))
+            _cbQuickPort.Text = _currentOptions.Port;
+        else if (ports.Length > 0)
+            _cbQuickPort.Text = ports[0];
+    }
+
+    private void OnQuickStartClicked(object? sender, EventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_cbQuickPort.Text))
+        {
+            MessageBox.Show(this, "Please select a COM port.", "No Port Selected",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        _currentOptions = new AppOptions
+        {
+            Port             = _cbQuickPort.Text.Trim(),
+            Baud             = _currentOptions.Baud,
+            Parity           = _currentOptions.Parity,
+            DataBits         = _currentOptions.DataBits,
+            StopBits         = _currentOptions.StopBits,
+            Handshake        = _currentOptions.Handshake,
+            OutDir           = _currentOptions.OutDir,
+            Prefix           = _currentOptions.Prefix,
+            Csv              = _currentOptions.Csv,
+            Reconnect        = _currentOptions.Reconnect,
+            ReconnectDelayMs = _currentOptions.ReconnectDelayMs,
+        };
+        _simulationMode = false;
+        _ = StartCaptureAsync().ContinueWith(
+            t => AppLog.Error("StartCaptureAsync error", t.Exception?.InnerException ?? t.Exception ?? new Exception("Unknown error")),
+            TaskContinuationOptions.OnlyOnFaulted);
+    }
+
     // ── Dark mode theming ────────────────────────────────────────────────
-    // Applies a coherent dark or light theme to the main UI surfaces.
     // Note: native WinForms controls (ComboBox drop-down list, scrollbars,
     // TabControl tabs) cannot be fully themed without owner-draw overrides,
     // which is out of scope for this focused PR.
@@ -300,6 +436,13 @@ internal class MainForm : Form
                 _                              => "🔴 Disconnected",
             };
         }
+
+        // Update quick-access toolbar button states
+        bool canStart = state is CaptureLifecycleState.Idle or CaptureLifecycleState.Error;
+        bool canStop  = state == CaptureLifecycleState.Running;
+        _btnStart.Enabled    = canStart;
+        _btnStop.Enabled     = canStop;
+        _cbQuickPort.Enabled = canStart;
     }
 
     private async Task StartCaptureAsync()
