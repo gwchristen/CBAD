@@ -35,6 +35,15 @@ internal sealed class StationDetailTab : UserControl
     private readonly Label _lblTargetCap     = new() { AutoSize = true };
     private readonly Label _lblResistance    = new() { AutoSize = true };
 
+    // ── Test Record Metadata fields ──────────────────────────────────────
+    private readonly TextBox  _txtWorkOrder      = new() { PlaceholderText = "Work order / ticket #" };
+    private readonly TextBox  _txtBatterySerial  = new() { PlaceholderText = "Battery serial / asset tag" };
+    private readonly CheckBox _chkVisualPass     = new() { Text = "Passed Visual Inspection", AutoSize = true };
+    private readonly TextBox  _txtNotes          = new() { Multiline = true, Height = 56, ScrollBars = ScrollBars.Vertical, PlaceholderText = "Notes / remarks…" };
+    private readonly Button   _btnCommitRecord   = new() { Text = "📋  Commit Record / Generate Report", AutoSize = true, Height = 30 };
+    private GroupBox? _recordMetaGroup;
+    private TableLayoutPanel? _recordMetaTable;
+
     // Theming support
     private Panel? _essentialsPanel;
     private GroupBox? _advGroup;
@@ -200,6 +209,7 @@ internal sealed class StationDetailTab : UserControl
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // metrics
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // last update
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 180f));  // adv group
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // record metadata group
 
         layout.Controls.Add(_lblStationBig,  0, 0);
         layout.Controls.Add(_lblBatteryId,   0, 1);
@@ -207,6 +217,7 @@ internal sealed class StationDetailTab : UserControl
         layout.Controls.Add(metricsFlow,     0, 3);
         layout.Controls.Add(_lblLastUpdate,  0, 4);
         layout.Controls.Add(advGroup,        0, 5);
+        layout.Controls.Add(BuildRecordMetadataGroup(), 0, 6);
 
         panel.Controls.Add(layout);
         return panel;
@@ -313,6 +324,114 @@ internal sealed class StationDetailTab : UserControl
         g.FillRectangle(textBgBrush, textX - 2, 0, textSize.Width + 4, textSize.Height);
         using var textBrush = new System.Drawing.SolidBrush(gb.ForeColor);
         g.DrawString(gb.Text, gb.Font, textBrush, textX, 0);
+    }
+
+    // ── Test Record Metadata group ───────────────────────────────────────
+    private GroupBox BuildRecordMetadataGroup()
+    {
+        var group = new GroupBox
+        {
+            Text         = "Test Record Metadata",
+            Dock         = DockStyle.Fill,
+            AutoSize     = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding      = new Padding(8, 20, 8, 8),
+            Margin       = new Padding(0, 8, 0, 4),
+        };
+
+        var table = new TableLayoutPanel
+        {
+            ColumnCount  = 1,
+            AutoSize     = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Dock         = DockStyle.Top,
+            Padding      = new Padding(2),
+        };
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+
+        void AddField(string labelText, Control ctrl)
+        {
+            var lbl = new Label
+            {
+                Text     = labelText,
+                AutoSize = true,
+                Font     = new System.Drawing.Font(SystemFonts.DefaultFont, System.Drawing.FontStyle.Bold),
+                Margin   = new Padding(0, 4, 0, 2),
+            };
+            ctrl.Dock   = DockStyle.Top;
+            ctrl.Margin = new Padding(0, 0, 0, 4);
+            table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            table.Controls.Add(lbl);
+            table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            table.Controls.Add(ctrl);
+        }
+
+        AddField("Work Order / Ticket #:", _txtWorkOrder);
+        AddField("Battery Serial / Asset Tag:", _txtBatterySerial);
+
+        // Visual inspection checkbox (no label above it, just the checkbox itself)
+        _chkVisualPass.Margin = new Padding(0, 6, 0, 4);
+        table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        table.Controls.Add(_chkVisualPass);
+
+        AddField("Notes / Remarks:", _txtNotes);
+
+        // Commit button
+        _btnCommitRecord.Dock    = DockStyle.Top;
+        _btnCommitRecord.Margin  = new Padding(0, 8, 0, 4);
+        _btnCommitRecord.FlatStyle = FlatStyle.Flat;
+        _btnCommitRecord.BackColor = System.Drawing.Color.FromArgb(30, 100, 180);
+        _btnCommitRecord.ForeColor = System.Drawing.Color.White;
+        _btnCommitRecord.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(20, 70, 140);
+        _btnCommitRecord.Click += OnCommitRecord;
+        table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        table.Controls.Add(_btnCommitRecord);
+
+        group.Controls.Add(table);
+
+        _recordMetaGroup = group;
+        _recordMetaTable = table;
+
+        group.Paint += OnRecordMetaGroupPaint;
+
+        return group;
+    }
+
+    private void OnRecordMetaGroupPaint(object? sender, PaintEventArgs e)
+    {
+        if (!_isDark) return;
+
+        var gb = (GroupBox)sender!;
+        var g  = e.Graphics;
+
+        var textSize  = g.MeasureString(gb.Text, gb.Font);
+        int borderTop = (int)(textSize.Height / 2);
+
+        using var bgBrush = new System.Drawing.SolidBrush(gb.BackColor);
+        g.FillRectangle(bgBrush, 0, borderTop, gb.Width, gb.Height - borderTop);
+        g.FillRectangle(bgBrush, 0, 0, gb.Width, borderTop);
+
+        using var pen = new System.Drawing.Pen(AppTheme.BorderColor(true));
+        g.DrawRectangle(pen, new System.Drawing.Rectangle(0, borderTop, gb.Width - 1, gb.Height - borderTop - 1));
+
+        const float textX = 9f;
+        using var textBgBrush = new System.Drawing.SolidBrush(gb.BackColor);
+        g.FillRectangle(textBgBrush, textX - 2, 0, textSize.Width + 4, textSize.Height);
+        using var textBrush = new System.Drawing.SolidBrush(gb.ForeColor);
+        g.DrawString(gb.Text, gb.Font, textBrush, textX, 0);
+    }
+
+    private void OnCommitRecord(object? sender, EventArgs e)
+    {
+        MessageBox.Show(
+            $"Station {_station} record commit is not yet implemented.{Environment.NewLine}" +
+            $"Work Order: {_txtWorkOrder.Text}{Environment.NewLine}" +
+            $"Battery Serial: {_txtBatterySerial.Text}{Environment.NewLine}" +
+            $"Visual Inspection Passed: {_chkVisualPass.Checked}{Environment.NewLine}" +
+            $"Notes: {_txtNotes.Text}",
+            "Commit Record — Coming Soon",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
     }
 
     // ── Chart + Stream tabs ─────────────────────────────────────────────
@@ -817,6 +936,47 @@ internal sealed class StationDetailTab : UserControl
             foreach (Control c in _advTable.Controls)
                 if (c is Label lbl)
                     lbl.ForeColor = AppTheme.LabelFg(isDark);
+        }
+
+        // Record metadata group
+        if (_recordMetaGroup != null)
+        {
+            _recordMetaGroup.ForeColor = AppTheme.LabelFg(isDark);
+            _recordMetaGroup.BackColor = AppTheme.PanelBg(isDark);
+            _recordMetaGroup.Invalidate();
+        }
+
+        if (_recordMetaTable != null)
+        {
+            _recordMetaTable.BackColor = AppTheme.PanelBg(isDark);
+            foreach (Control c in _recordMetaTable.Controls)
+            {
+                if (c is Label lbl)
+                {
+                    lbl.ForeColor = AppTheme.LabelFg(isDark);
+                    lbl.BackColor = AppTheme.PanelBg(isDark);
+                }
+                else if (c is TextBox txt)
+                {
+                    txt.BackColor = AppTheme.InputBg(isDark);
+                    txt.ForeColor = AppTheme.InputFg(isDark);
+                }
+                else if (c is CheckBox chk)
+                {
+                    chk.ForeColor = AppTheme.LabelFg(isDark);
+                    chk.BackColor = AppTheme.PanelBg(isDark);
+                }
+                else if (c is Button btn && btn == _btnCommitRecord)
+                {
+                    btn.BackColor = isDark
+                        ? System.Drawing.Color.FromArgb(25, 75, 145)
+                        : System.Drawing.Color.FromArgb(30, 100, 180);
+                    btn.ForeColor = System.Drawing.Color.White;
+                    btn.FlatAppearance.BorderColor = isDark
+                        ? System.Drawing.Color.FromArgb(15, 55, 110)
+                        : System.Drawing.Color.FromArgb(20, 70, 140);
+                }
+            }
         }
     }
 }

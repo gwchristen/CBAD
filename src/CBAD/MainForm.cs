@@ -31,6 +31,14 @@ internal class MainForm : Form
     private readonly Label _lblWebUrl       = new() { AutoSize = true, Margin = new Padding(16, 0, 3, 0) };
     private CaptureLifecycleState _lifecycleState = CaptureLifecycleState.Idle;
 
+    // Global metadata fields (left panel)
+    private readonly TextBox _txtOperatorId      = new() { PlaceholderText = "Tech / Operator ID" };
+    private readonly TextBox _txtAnalyzerModel   = new() { Text = "Cadex C7x00", PlaceholderText = "e.g. Cadex C7x00" };
+    private readonly TextBox _txtAnalyzerSerial  = new() { PlaceholderText = "Analyzer serial #" };
+    private Panel? _leftPanel;
+    private GroupBox? _globalMetadataGroup;
+    private TableLayoutPanel? _globalMetadataLayout;
+
     // Status strip (bottom of form)
     private ToolStripStatusLabel _statusStripLabel = null!;
 
@@ -144,7 +152,11 @@ internal class MainForm : Form
         // ── Header strip ─────────────────────────────────────────────────
         Controls.Add(BuildHeaderStrip());
 
-        // ── Tab control — fills all remaining space ──────────────────────
+        // ── Left panel — global metadata (fixed 250px, docked Left) ─────
+        _leftPanel = BuildGlobalMetadataPanel();
+        Controls.Add(_leftPanel);
+
+        // ── Tab control — fills all remaining space (right of left panel) ──
         var tabs = new TabControl { Dock = DockStyle.Fill };
 
         _overviewTab = new OverviewTab();
@@ -335,8 +347,74 @@ internal class MainForm : Form
         return bar;
     }
 
-    private void RefreshQuickPorts()
+    // ── Global Metadata left panel ───────────────────────────────────────
+    private Panel BuildGlobalMetadataPanel()
     {
+        var panel = new Panel
+        {
+            Dock      = DockStyle.Left,
+            Width     = 250,
+            BackColor = AppTheme.LightPanelBg,
+            Padding   = new Padding(8, 8, 8, 8),
+        };
+
+        var group = new GroupBox
+        {
+            Text         = "Global Metadata",
+            Dock         = DockStyle.Top,
+            AutoSize     = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding      = new Padding(8, 16, 8, 8),
+            Margin       = new Padding(0),
+        };
+
+        var layout = new TableLayoutPanel
+        {
+            ColumnCount  = 1,
+            AutoSize     = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Dock         = DockStyle.Top,
+            Padding      = new Padding(0),
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+
+        void AddRow(string labelText, TextBox txt)
+        {
+            var lbl = new Label
+            {
+                Text     = labelText,
+                AutoSize = true,
+                Font     = new Font(SystemFonts.DefaultFont, FontStyle.Bold),
+                Margin   = new Padding(0, 6, 0, 2),
+            };
+            txt.Dock   = DockStyle.Top;
+            txt.Margin = new Padding(0, 0, 0, 4);
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.Controls.Add(lbl);
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.Controls.Add(txt);
+        }
+
+        AddRow("Operator / Tech ID:", _txtOperatorId);
+        AddRow("Analyzer Model:", _txtAnalyzerModel);
+        AddRow("Analyzer Serial #:", _txtAnalyzerSerial);
+
+        group.Controls.Add(layout);
+        panel.Controls.Add(group);
+
+        _globalMetadataGroup  = group;
+        _globalMetadataLayout = layout;
+
+        return panel;
+    }
+
+    /// <summary>Returns current global metadata values for use when committing a test record.</summary>
+    internal (string OperatorId, string AnalyzerModel, string AnalyzerSerial) GetGlobalMetadata() =>
+        (_txtOperatorId.Text.Trim(),
+         _txtAnalyzerModel.Text.Trim(),
+         _txtAnalyzerSerial.Text.Trim());
+
+    private void RefreshQuickPorts()    {
         var selected = _cbQuickPort.Text;
         _cbQuickPort.Items.Clear();
 
@@ -396,6 +474,34 @@ internal class MainForm : Form
         var formBg  = isDark ? AppTheme.DarkFormBg  : AppTheme.LightFormBg;
 
         BackColor = formBg;
+
+        // Theme the global metadata left panel — targeted per control type
+        if (_leftPanel != null)
+            _leftPanel.BackColor = AppTheme.PanelBg(isDark);
+
+        if (_globalMetadataGroup != null)
+        {
+            _globalMetadataGroup.BackColor = AppTheme.PanelBg(isDark);
+            _globalMetadataGroup.ForeColor = AppTheme.LabelFg(isDark);
+        }
+
+        if (_globalMetadataLayout != null)
+        {
+            _globalMetadataLayout.BackColor = AppTheme.PanelBg(isDark);
+            foreach (Control c in _globalMetadataLayout.Controls)
+            {
+                if (c is TextBox txt)
+                {
+                    txt.BackColor = AppTheme.InputBg(isDark);
+                    txt.ForeColor = AppTheme.InputFg(isDark);
+                }
+                else if (c is Label lbl)
+                {
+                    lbl.BackColor = AppTheme.PanelBg(isDark);
+                    lbl.ForeColor = AppTheme.LabelFg(isDark);
+                }
+            }
+        }
 
         foreach (var tab in _detailTabs)
             tab.ApplyTheme(isDark);
