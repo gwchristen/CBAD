@@ -410,8 +410,11 @@ internal sealed class StationDetailTab : UserControl
             {
                 _lastState.History.Clear();
                 _lastState.RawLines.Clear();
-                _lastState.Latest = null;
-                _lastState.TargetCapacity = null;
+                _lastState.Latest             = null;
+                _lastState.TargetCapacity     = null;
+                _lastState.FailureReason      = null;
+                _lastState.LastActiveEventCode = null;
+                _lastState.LastActiveRecord    = null;
             }
             _lastState = null;
 
@@ -436,6 +439,10 @@ internal sealed class StationDetailTab : UserControl
             _lblStatusDot.BackColor = System.Drawing.Color.LightGray; // matches initial value in BuildEssentialsPanel
             _lblStatus.Text      = "No data";
             _lblStatus.ForeColor = AppTheme.MutedFg(_isDark);
+            _lblStatus.Font      = new System.Drawing.Font(
+                _lblStatus.Font.FontFamily,
+                _lblStatus.Font.Size,
+                System.Drawing.FontStyle.Regular);
             _lblVoltage.Text     = "Voltage: —";
             _lblCurrent.Text     = "Current: —";
             _lblHealth.Text      = "Health: —";
@@ -590,11 +597,30 @@ internal sealed class StationDetailTab : UserControl
 
             // Essentials section
             _lblBatteryId.Text   = string.IsNullOrWhiteSpace(rec.BatteryId) ? "Battery: (no label)" : $"Battery: {rec.BatteryId}";
-            _lblStatusDot.BackColor = statusColor;
-            _lblStatus.Text      = CadexStatusCodes.Describe(processCodeStr);
-            _lblStatus.ForeColor = statusColor == System.Drawing.Color.LightGray
-                ? AppTheme.MutedFg(_isDark)
-                : AppTheme.LabelFg(_isDark);
+
+            // If a failure reason has been determined, show it prominently in red.
+            if (!string.IsNullOrEmpty(state.FailureReason))
+            {
+                _lblStatusDot.BackColor = System.Drawing.Color.Red;
+                _lblStatus.Text         = $"FAIL: {state.FailureReason}";
+                _lblStatus.ForeColor    = System.Drawing.Color.Red;
+                _lblStatus.Font         = new System.Drawing.Font(
+                    _lblStatus.Font.FontFamily,
+                    _lblStatus.Font.Size,
+                    System.Drawing.FontStyle.Bold);
+            }
+            else
+            {
+                _lblStatusDot.BackColor = statusColor;
+                _lblStatus.Text         = CadexStatusCodes.Describe(processCodeStr);
+                _lblStatus.ForeColor    = statusColor == System.Drawing.Color.LightGray
+                    ? AppTheme.MutedFg(_isDark)
+                    : AppTheme.LabelFg(_isDark);
+                _lblStatus.Font         = new System.Drawing.Font(
+                    _lblStatus.Font.FontFamily,
+                    _lblStatus.Font.Size,
+                    System.Drawing.FontStyle.Regular);
+            }
 
             _lblVoltage.Text = rec.VoltageMv.HasValue    ? $"Voltage: {rec.VoltageMv} mV"    : "Voltage: —";
             _lblCurrent.Text = rec.CurrentMa.HasValue    ? $"Current: {rec.CurrentMa} mA"    : "Current: —";
@@ -607,7 +633,13 @@ internal sealed class StationDetailTab : UserControl
             _lblLastUpdateAdv.Text  = rec.ReceivedAt.ToString("HH:mm:ss UTC");
             _lblDate.Text           = rec.Timestamp.ToString("MM/dd/yyyy");
             _lblTime.Text           = rec.Timestamp.ToString("HH:mm:ss");
-            _lblEventCode.Text      = $"{rec.EventCode} ({DescribeEvent(rec.EventCode)})";
+
+            var eventDesc    = CadexEventParser.Describe(rec.EventCode);
+            var eventPayload = CadexEventParser.FormatPayload(rec);
+            _lblEventCode.Text = string.IsNullOrEmpty(eventPayload)
+                ? $"{rec.EventCode} ({eventDesc})"
+                : $"{rec.EventCode} ({eventDesc}: {eventPayload})";
+
             _lblBatteryType.Text    = processCodeStr == "" ? "—" : $"{processCodeStr} ({CadexStatusCodes.Describe(processCodeStr)})";
             _lblHealthCurrent.Text  = rec.HealthCurrent.HasValue  ? $"{rec.HealthCurrent}%"  : "—";
             _lblHealthPrev.Text     = rec.HealthPrevious.HasValue ? $"{rec.HealthPrevious}%" : "—";
@@ -685,16 +717,6 @@ internal sealed class StationDetailTab : UserControl
         if (!_streamPaused)
             RefreshStream();
     }
-
-    private static string DescribeEvent(int code) => code switch
-    {
-        11  => "Processing Began",
-        20  => "Battery Inserted",
-        27  => "OhmTest",
-        201 => "Adapter Inserted",
-        250 => "Normal Processing",
-        _   => $"{code} sec elapsed",
-    };
 
     // ── Theming ─────────────────────────────────────────────────────────
     public void ApplyTheme(bool isDark)

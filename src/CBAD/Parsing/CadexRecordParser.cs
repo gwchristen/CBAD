@@ -67,6 +67,18 @@ internal static class CadexRecordParser
             }
         }
 
+        // For OhmTest events (27, 28, 135, 136) the 8th field (index 7) carries the
+        // resistance in mΩ rather than a health pair.  Parse it before the health
+        // block so that the health fields remain null for these events.
+        int? resistanceMOhm = null;
+        bool isOhmTestEvent = eventCode is 27 or 28 or 135 or 136;
+        if (isOhmTestEvent && !string.IsNullOrEmpty(healthField)
+            && int.TryParse(healthField, out var ohmRes))
+        {
+            resistanceMOhm = ohmRes;
+            healthField = string.Empty;
+        }
+
         int? healthCurrent = null;
         int? healthPrevious = null;
 
@@ -81,17 +93,13 @@ internal static class CadexRecordParser
             if (hParts.Length >= 2 && int.TryParse(hParts[1].Trim(), out var hp)) healthPrevious = hp;
         }
 
-        // Optional field 8:
-        //   event 27  → ResistanceMOhm (OhmTest)
+        // Optional field 8 (index 8, requires ≥ 9 fields):
         //   event 250 → CapacityPayload (Target / Measured Capacity string, e.g. "1\2")
-        int? resistanceMOhm = null;
         string? capacityPayload = null;
         if (fields.Count > 8)
         {
             var field8 = fields[8].Trim();
-            if (eventCode == 27 && int.TryParse(field8, out var res))
-                resistanceMOhm = res;
-            else if (eventCode == 250 && !string.IsNullOrEmpty(field8))
+            if (eventCode == 250 && !string.IsNullOrEmpty(field8))
                 capacityPayload = field8;
         }
 
