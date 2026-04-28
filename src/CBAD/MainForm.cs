@@ -146,10 +146,7 @@ internal class MainForm : Form
         Controls.Add(menuStrip);
         MainMenuStrip = menuStrip;
 
-        // ── Quick-access toolbar (just below menu) ────────────────────────
-        Controls.Add(BuildQuickAccessBar());
-
-        // ── Header strip ─────────────────────────────────────────────────
+        // ── Header strip (title/status row + quick-access toolbar row) ──────
         Controls.Add(BuildHeaderStrip());
 
         // ── Left panel — global metadata (fixed 250px, docked Left) ─────
@@ -176,24 +173,38 @@ internal class MainForm : Form
         Controls.Add(tabs);
     }
 
-    // ── Header strip: title | status | actions ──────────────────────────
+    // ── Header strip: title/status row + quick-access toolbar row ────────
+    // Two-row panel so the form has exactly 5 top-level docked controls in
+    // the correct order: StatusStrip(Bottom) → MenuStrip(Top) →
+    // HeaderStrip(Top) → LeftPanel(Left) → TabControl(Fill).
     private Panel BuildHeaderStrip()
     {
+        // Outer panel contains two horizontal bands stacked vertically:
+        // Row 0 (top, 58 px)  — app title | live status | dark-mode toggle
+        // Row 1 (bottom, 36 px) — COM port | refresh | Start | Stop
         var strip = new Panel
         {
-            Dock = DockStyle.Top,
-            Height = 58,
+            Dock      = DockStyle.Top,
+            Height    = 94,           // 58 (title row) + 36 (toolbar row)
             BackColor = HeaderColor,
-            Padding = new Padding(0),
+            Padding   = new Padding(0),
+        };
+
+        // ── Row 0: title | live status | actions ────────────────────────
+        var titleRow = new Panel
+        {
+            Dock      = DockStyle.Top,
+            Height    = 58,
+            BackColor = Color.Transparent,
         };
 
         var table = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock        = DockStyle.Fill,
             ColumnCount = 3,
-            RowCount = 1,
-            BackColor = Color.Transparent,
-            Padding = new Padding(10, 0, 8, 0),
+            RowCount    = 1,
+            BackColor   = Color.Transparent,
+            Padding     = new Padding(10, 0, 8, 0),
         };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
@@ -202,35 +213,35 @@ internal class MainForm : Form
         // Column 0: app title
         var titleLabel = new Label
         {
-            Text = "CBAD  Battery Analyzer",
-            Font = new Font("Segoe UI", 12f, FontStyle.Bold),
+            Text      = "CBAD  Battery Analyzer",
+            Font      = new Font("Segoe UI", 12f, FontStyle.Bold),
             ForeColor = Color.White,
-            AutoSize = true,
+            AutoSize  = true,
             TextAlign = ContentAlignment.MiddleLeft,
-            Margin = new Padding(0, 0, 20, 0),
+            Margin    = new Padding(0, 0, 20, 0),
         };
 
         // Column 1: live status
-        _lblStatusState.Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold);
+        _lblStatusState.Font     = new Font(SystemFonts.DefaultFont, FontStyle.Bold);
         _lblStatusState.ForeColor = Color.White;
         _lblStatusDetail.ForeColor = Color.FromArgb(180, 220, 255);
 
         var statusLabel = new Label
         {
-            Text = "Status:",
-            AutoSize = true,
-            Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold),
+            Text      = "Status:",
+            AutoSize  = true,
+            Font      = new Font(SystemFonts.DefaultFont, FontStyle.Bold),
             ForeColor = Color.FromArgb(160, 190, 225),
-            Margin = new Padding(0, 0, 8, 0),
+            Margin    = new Padding(0, 0, 8, 0),
         };
 
         var statusFlow = new FlowLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock          = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            BackColor = Color.Transparent,
-            Padding = new Padding(0, 15, 0, 0),
+            WrapContents  = false,
+            BackColor     = Color.Transparent,
+            Padding       = new Padding(0, 15, 0, 0),
         };
         statusFlow.Controls.Add(statusLabel);
         statusFlow.Controls.Add(_lblStatusDot);
@@ -238,24 +249,24 @@ internal class MainForm : Form
         statusFlow.Controls.Add(_lblStatusDetail);
         statusFlow.Controls.Add(_lblWebUrl);
 
-        // Column 2: action controls (right-aligned) — just the dark-mode toggle
-        _btnDarkMode.Text = "🌙 Dark";
-        _btnDarkMode.AutoSize = true;
-        _btnDarkMode.Height = 28;
+        // Column 2: dark-mode toggle
+        _btnDarkMode.Text      = "🌙 Dark";
+        _btnDarkMode.AutoSize  = true;
+        _btnDarkMode.Height    = 28;
         _btnDarkMode.FlatStyle = FlatStyle.Flat;
         _btnDarkMode.ForeColor = Color.White;
         _btnDarkMode.BackColor = Color.FromArgb(55, 70, 100);
         _btnDarkMode.FlatAppearance.BorderColor = Color.FromArgb(90, 110, 155);
-        _btnDarkMode.Margin = new Padding(4, 12, 4, 12);
-        _btnDarkMode.Click += (_, __) => ApplyTheme(!_isDarkMode);
+        _btnDarkMode.Margin    = new Padding(4, 12, 4, 12);
+        _btnDarkMode.Click    += (_, __) => ApplyTheme(!_isDarkMode);
 
         var actionsFlow = new FlowLayoutPanel
         {
-            AutoSize = true,
-            Dock = DockStyle.Fill,
+            AutoSize      = true,
+            Dock          = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            BackColor = Color.Transparent,
+            WrapContents  = false,
+            BackColor     = Color.Transparent,
         };
         actionsFlow.Controls.Add(_btnDarkMode);
 
@@ -263,22 +274,18 @@ internal class MainForm : Form
         table.Controls.Add(statusFlow, 1, 0);
         table.Controls.Add(actionsFlow, 2, 0);
 
-        strip.Controls.Add(table);
-        return strip;
-    }
+        titleRow.Controls.Add(table);
 
-    // ── Quick-access toolbar: COM port | Refresh | Start | Stop ─────────
-    private Panel BuildQuickAccessBar()
-    {
-        var bar = new Panel
+        // ── Row 1: quick-access toolbar (COM port | Refresh | Start | Stop) ─
+        var toolbarRow = new Panel
         {
-            Dock      = DockStyle.Top,
+            Dock      = DockStyle.Bottom,
             Height    = 36,
             BackColor = Color.FromArgb(45, 58, 82),
             Padding   = new Padding(6, 0, 6, 0),
         };
 
-        var flow = new FlowLayoutPanel
+        var toolFlow = new FlowLayoutPanel
         {
             Dock          = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
@@ -337,14 +344,20 @@ internal class MainForm : Form
                 t => AppLog.Error("StopCaptureAsync error", t.Exception?.InnerException ?? t.Exception ?? new Exception("Unknown error")),
                 TaskContinuationOptions.OnlyOnFaulted);
 
-        flow.Controls.Add(portLabel);
-        flow.Controls.Add(_cbQuickPort);
-        flow.Controls.Add(btnRefresh);
-        flow.Controls.Add(_btnStart);
-        flow.Controls.Add(_btnStop);
+        toolFlow.Controls.Add(portLabel);
+        toolFlow.Controls.Add(_cbQuickPort);
+        toolFlow.Controls.Add(btnRefresh);
+        toolFlow.Controls.Add(_btnStart);
+        toolFlow.Controls.Add(_btnStop);
 
-        bar.Controls.Add(flow);
-        return bar;
+        toolbarRow.Controls.Add(toolFlow);
+
+        // Add toolbar row FIRST (Dock=Bottom) then title row (Dock=Top) so
+        // both rows fill the 94px strip without overlap.
+        strip.Controls.Add(toolbarRow);
+        strip.Controls.Add(titleRow);
+
+        return strip;
     }
 
     // ── Global Metadata left panel ───────────────────────────────────────
