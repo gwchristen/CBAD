@@ -21,9 +21,11 @@ public class CsvLineSinkTests : IDisposable
     [Fact]
     public void HeaderRow_IsWrittenOnConstruction()
     {
-        using var sink = new CsvLineSink(_tempDir, "test");
+        string path;
+        using (var sink = new CsvLineSink(_tempDir, "test"))
+            path = sink.Path;
 
-        var lines = File.ReadAllLines(sink.Path);
+        var lines = File.ReadAllLines(path);
         Assert.Single(lines);
         Assert.Equal("timestamp_utc,data", lines[0]);
     }
@@ -31,12 +33,15 @@ public class CsvLineSinkTests : IDisposable
     [Fact]
     public void WrittenLine_AppearsInCsvWithCorrectFormat()
     {
-        using var sink = new CsvLineSink(_tempDir, "test");
         var ts = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
+        string path;
+        using (var sink = new CsvLineSink(_tempDir, "test"))
+        {
+            sink.Write(ts, "hello");
+            path = sink.Path;
+        }
 
-        sink.Write(ts, "hello");
-
-        var lines = File.ReadAllLines(sink.Path);
+        var lines = File.ReadAllLines(path);
         Assert.Equal(2, lines.Length);
         Assert.Equal($"{ts:O},\"hello\"", lines[1]);
     }
@@ -44,12 +49,15 @@ public class CsvLineSinkTests : IDisposable
     [Fact]
     public void NewlineNormalization_CrLf_SplitsIntoSeparateRows()
     {
-        using var sink = new CsvLineSink(_tempDir, "test");
         var ts = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
+        string path;
+        using (var sink = new CsvLineSink(_tempDir, "test"))
+        {
+            sink.Write(ts, "line1\r\nline2");
+            path = sink.Path;
+        }
 
-        sink.Write(ts, "line1\r\nline2");
-
-        var lines = File.ReadAllLines(sink.Path);
+        var lines = File.ReadAllLines(path);
         Assert.Equal(3, lines.Length); // header + 2 data rows
         Assert.Contains("\"line1\"", lines[1]);
         Assert.Contains("\"line2\"", lines[2]);
@@ -58,24 +66,30 @@ public class CsvLineSinkTests : IDisposable
     [Fact]
     public void EmptyChunk_IsSkipped()
     {
-        using var sink = new CsvLineSink(_tempDir, "test");
         var ts = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
+        string path;
+        using (var sink = new CsvLineSink(_tempDir, "test"))
+        {
+            sink.Write(ts, "");
+            path = sink.Path;
+        }
 
-        sink.Write(ts, "");
-
-        var lines = File.ReadAllLines(sink.Path);
+        var lines = File.ReadAllLines(path);
         Assert.Single(lines); // only the header
     }
 
     [Fact]
     public void QuotesInData_AreEscaped()
     {
-        using var sink = new CsvLineSink(_tempDir, "test");
         var ts = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
+        string path;
+        using (var sink = new CsvLineSink(_tempDir, "test"))
+        {
+            sink.Write(ts, "say \"hello\"");
+            path = sink.Path;
+        }
 
-        sink.Write(ts, "say \"hello\"");
-
-        var lines = File.ReadAllLines(sink.Path);
+        var lines = File.ReadAllLines(path);
         Assert.Equal(2, lines.Length);
         Assert.Contains("\"say \"\"hello\"\"\"", lines[1]);
     }
