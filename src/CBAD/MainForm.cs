@@ -1,6 +1,5 @@
 using System.Drawing;
 using System.IO.Ports;
-using System.Text;
 using CBAD.Simulation;
 using CBAD.UI;
 using CBAD.WebServer;
@@ -9,35 +8,31 @@ namespace CBAD;
 
 internal class MainForm : Form
 {
-    // Serial connection controls
-    private ComboBox cbPort = new();
-    private ComboBox cbBaud = new();
-    private ComboBox cbParity = new();
-    private ComboBox cbDataBits = new();
-    private ComboBox cbStopBits = new();
-    private ComboBox cbHandshake = new();
-    private TextBox txtOutDir = new();
-    private TextBox txtPrefix = new();
-    private CheckBox chkCsv = new();
-    private CheckBox chkReconnect = new();
-    private NumericUpDown numReconnectMs = new();
-    private CheckBox chkSimulation = new();
-    private Button btnBrowse = new();
-    private Button btnRefreshPorts = new();
-    private Button btnStart = new();
-    private Button btnStop = new();
+    // ── Connection settings (backing state — UI lives in ConnectionSettingsForm) ──
+    private AppOptions _currentOptions = new AppOptions
+    {
+        Baud             = 9600,
+        Parity           = Parity.None,
+        DataBits         = 8,
+        StopBits         = StopBits.One,
+        Handshake        = Handshake.None,
+        OutDir           = Path.Combine(AppContext.BaseDirectory, "logs"),
+        Prefix           = "cadex_raw",
+        Csv              = false,
+        Reconnect        = true,
+        ReconnectDelayMs = 2000,
+    };
+    private bool _simulationMode = false;
 
-    // Status indicator controls
+    // Status indicator controls (header)
     private readonly Label _lblStatusDot    = new() { AutoSize = false, Width = 14, Height = 14, Margin = new Padding(0, 2, 8, 0) };
     private readonly Label _lblStatusState  = new() { AutoSize = true, Margin = new Padding(0, 0, 10, 0) };
     private readonly Label _lblStatusDetail = new() { AutoSize = true, Margin = new Padding(0, 0, 3, 0) };
     private readonly Label _lblWebUrl       = new() { AutoSize = true, Margin = new Padding(16, 0, 3, 0) };
     private CaptureLifecycleState _lifecycleState = CaptureLifecycleState.Idle;
 
-    // Settings panel toggle
-    private Panel _settingsPanel = null!;
-    private Button _btnToggleSettings = new();
-    private bool _settingsExpanded = true;
+    // Status strip (bottom of form)
+    private ToolStripStatusLabel _statusStripLabel = null!;
 
     // Dark mode toggle
     private Button _btnDarkMode = new();
@@ -71,7 +66,6 @@ internal class MainForm : Form
         _dashboardServer = new DashboardServer(_stateManager);
 
         BuildUi();
-        LoadDefaults();
 
         // Wire station-state events after UI controls exist.
         _stateManager.StationUpdated += state =>
@@ -85,8 +79,7 @@ internal class MainForm : Form
         if (startupDefaults is not null)
             ApplyStartupDefaults(startupDefaults);
 
-        RefreshPorts();
-        SetRunningState(false);
+        SetLifecycleState(CaptureLifecycleState.Idle);
 
         // Start the embedded web dashboard and update the URL label.
         try
@@ -107,30 +100,43 @@ internal class MainForm : Form
 
     private void BuildUi()
     {
-        var root = new TableLayoutPanel
+        // ── Menu strip (top) ─────────────────────────────────────────────
+        var menuStrip = new MenuStrip();
+
+        var connectionsMenu = new ToolStripMenuItem("Connections");
+        connectionsMenu.Click += (_, __) => OpenConnectionSettings();
+
+        var settingsMenu = new ToolStripMenuItem("Settings");
+        settingsMenu.Click += (_, __) => new SettingsForm().ShowDialog(this);
+
+        var recordsMenu = new ToolStripMenuItem("Records");
+        recordsMenu.Click += (_, __) =>
+            MessageBox.Show(this,
+                "Records and database integration coming soon.",
+                "Records",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+
+        menuStrip.Items.Add(connectionsMenu);
+        menuStrip.Items.Add(settingsMenu);
+        menuStrip.Items.Add(recordsMenu);
+        Controls.Add(menuStrip);
+        MainMenuStrip = menuStrip;
+
+        // ── Status strip (bottom) ────────────────────────────────────────
+        var statusStrip = new StatusStrip();
+        _statusStripLabel = new ToolStripStatusLabel("🔴 Disconnected")
         {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 2,
-            Padding = new Padding(0),
+            Spring    = true,
+            TextAlign = ContentAlignment.MiddleLeft,
         };
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        Controls.Add(root);
+        statusStrip.Items.Add(_statusStripLabel);
+        Controls.Add(statusStrip);
 
-        // ── Top panel ──────────────────────────────────────────────────
-        var topPanel = new Panel { Dock = DockStyle.Top, AutoSize = true };
+        // ── Header strip ─────────────────────────────────────────────────
+        Controls.Add(BuildHeaderStrip());
 
-        // Settings panel added first → sits below header (last-added = topmost with DockStyle.Top)
-        _settingsPanel = BuildSettingsPanel();
-        topPanel.Controls.Add(_settingsPanel);
-
-        // Header strip added last → sits at the very top
-        topPanel.Controls.Add(BuildHeaderStrip());
-
-        root.Controls.Add(topPanel);
-
-        // ── Tab control ─────────────────────────────────────────────────
+        // ── Tab control — fills all remaining space ──────────────────────
         var tabs = new TabControl { Dock = DockStyle.Fill };
 
         _overviewTab = new OverviewTab();
@@ -147,7 +153,7 @@ internal class MainForm : Form
             tabs.TabPages.Add(tp);
         }
 
-        root.Controls.Add(tabs);
+        Controls.Add(tabs);
     }
 
     // ── Header strip: title | status | actions ──────────────────────────
@@ -212,17 +218,7 @@ internal class MainForm : Form
         statusFlow.Controls.Add(_lblStatusDetail);
         statusFlow.Controls.Add(_lblWebUrl);
 
-        // Column 2: action controls (right-aligned)
-        var toolTip = new ToolTip();
-        toolTip.SetToolTip(chkSimulation, "Run with simulated Cadex data — no hardware required");
-
-        chkSimulation.Text = "Demo Mode";
-        chkSimulation.AutoSize = true;
-        chkSimulation.ForeColor = Color.White;
-        chkSimulation.BackColor = Color.Transparent;
-        chkSimulation.Margin = new Padding(4, 16, 8, 4);
-        chkSimulation.CheckedChanged += OnSimulationCheckedChanged;
-
+        // Column 2: action controls (right-aligned) — just the dark-mode toggle
         _btnDarkMode.Text = "🌙 Dark";
         _btnDarkMode.AutoSize = true;
         _btnDarkMode.Height = 28;
@@ -233,36 +229,6 @@ internal class MainForm : Form
         _btnDarkMode.Margin = new Padding(4, 12, 4, 12);
         _btnDarkMode.Click += (_, __) => ApplyTheme(!_isDarkMode);
 
-        _btnToggleSettings.Text = "⚙ Settings ▾";
-        _btnToggleSettings.AutoSize = true;
-        _btnToggleSettings.Height = 28;
-        _btnToggleSettings.FlatStyle = FlatStyle.Flat;
-        _btnToggleSettings.ForeColor = Color.White;
-        _btnToggleSettings.BackColor = Color.FromArgb(60, 90, 130);
-        _btnToggleSettings.FlatAppearance.BorderColor = Color.FromArgb(90, 130, 180);
-        _btnToggleSettings.Margin = new Padding(4, 12, 8, 12);
-        _btnToggleSettings.Click += (_, __) => ToggleSettings();
-
-        btnStart.Text = "▶  Start";
-        btnStart.Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold);
-        btnStart.Size = new Size(96, 32);
-        btnStart.BackColor = Color.FromArgb(34, 139, 34);
-        btnStart.ForeColor = Color.White;
-        btnStart.FlatStyle = FlatStyle.Flat;
-        btnStart.FlatAppearance.BorderColor = Color.FromArgb(20, 100, 20);
-        btnStart.Margin = new Padding(4, 10, 4, 10);
-        btnStart.Click += async (_, __) => await StartCaptureAsync();
-
-        btnStop.Text = "■  Stop";
-        btnStop.Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold);
-        btnStop.Size = new Size(96, 32);
-        btnStop.BackColor = Color.FromArgb(180, 40, 40);
-        btnStop.ForeColor = Color.White;
-        btnStop.FlatStyle = FlatStyle.Flat;
-        btnStop.FlatAppearance.BorderColor = Color.FromArgb(120, 20, 20);
-        btnStop.Margin = new Padding(4, 10, 6, 10);
-        btnStop.Click += async (_, __) => await StopCaptureAsync();
-
         var actionsFlow = new FlowLayoutPanel
         {
             AutoSize = true,
@@ -271,149 +237,14 @@ internal class MainForm : Form
             WrapContents = false,
             BackColor = Color.Transparent,
         };
-        actionsFlow.Controls.Add(chkSimulation);
         actionsFlow.Controls.Add(_btnDarkMode);
-        actionsFlow.Controls.Add(_btnToggleSettings);
-        actionsFlow.Controls.Add(btnStart);
-        actionsFlow.Controls.Add(btnStop);
 
         table.Controls.Add(titleLabel, 0, 0);
         table.Controls.Add(statusFlow, 1, 0);
         table.Controls.Add(actionsFlow, 2, 0);
 
         strip.Controls.Add(table);
-        SetLifecycleState(CaptureLifecycleState.Idle);
         return strip;
-    }
-
-    // ── Settings panel: Connection | Output ─────────────────────────────
-    private Panel BuildSettingsPanel()
-    {
-        var panel = new Panel
-        {
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            BackColor = Color.FromArgb(245, 247, 250),
-            Padding = new Padding(8, 6, 8, 8),
-        };
-
-        var outerTable = new TableLayoutPanel
-        {
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            ColumnCount = 2,
-            RowCount = 1,
-            Padding = new Padding(0),
-        };
-        outerTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 56));
-        outerTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 44));
-
-        // ── Left: Connection Settings ────────────────────────────────
-        var connGroup = new GroupBox
-        {
-            Text = "Connection Settings",
-            Dock = DockStyle.Fill,
-            AutoSize = true,
-            Padding = new Padding(8, 2, 8, 8),
-        };
-
-        var connGrid = new TableLayoutPanel
-        {
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            ColumnCount = 4,
-            RowCount = 4,
-        };
-        for (int i = 0; i < 4; i++) connGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
-
-        AddLabeled(connGrid, "Port", cbPort, 0, 0);
-        AddLabeled(connGrid, "Baud", cbBaud, 1, 0);
-        AddLabeled(connGrid, "Parity", cbParity, 2, 0);
-        AddLabeled(connGrid, "Data Bits", cbDataBits, 3, 0);
-        AddLabeled(connGrid, "Stop Bits", cbStopBits, 0, 2);
-        AddLabeled(connGrid, "Handshake", cbHandshake, 1, 2);
-
-        btnRefreshPorts.Text = "Refresh Ports";
-        btnRefreshPorts.AutoSize = true;
-        btnRefreshPorts.Margin = new Padding(3, 8, 10, 3);
-        btnRefreshPorts.Click += (_, __) => RefreshPorts();
-        connGrid.Controls.Add(new Label { Text = " ", AutoSize = true, Margin = new Padding(3, 8, 3, 3) }, 2, 2);
-        connGrid.Controls.Add(btnRefreshPorts, 2, 3);
-
-        connGroup.Controls.Add(connGrid);
-
-        // ── Right: Output & Logging ─────────────────────────────────
-        var outGroup = new GroupBox
-        {
-            Text = "Output & Logging",
-            Dock = DockStyle.Fill,
-            AutoSize = true,
-            Padding = new Padding(8, 2, 8, 8),
-        };
-
-        var outGrid = new TableLayoutPanel
-        {
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            ColumnCount = 2,
-            RowCount = 4,
-        };
-        outGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60));
-        outGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
-
-        var outDirPanel = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            AutoSize = true,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-        };
-        txtOutDir.Width = 200;
-        btnBrowse.Text = "Browse…";
-        btnBrowse.AutoSize = true;
-        btnBrowse.Margin = new Padding(4, 0, 0, 0);
-        btnBrowse.Click += (_, __) => BrowseOutDir();
-        outDirPanel.Controls.Add(txtOutDir);
-        outDirPanel.Controls.Add(btnBrowse);
-
-        AddLabeled(outGrid, "Output Folder", outDirPanel, 0, 0);
-        AddLabeled(outGrid, "File Prefix", txtPrefix, 1, 0);
-
-        chkCsv.Text = "CSV Output";
-        chkCsv.AutoSize = true;
-        chkReconnect.Text = "Auto-Reconnect";
-        chkReconnect.AutoSize = true;
-        numReconnectMs.Minimum = 100;
-        numReconnectMs.Maximum = 600000;
-        numReconnectMs.Increment = 100;
-        numReconnectMs.Width = 80;
-
-        var flagsRow = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            AutoSize = true,
-            FlowDirection = FlowDirection.LeftToRight,
-        };
-        flagsRow.Controls.Add(chkCsv);
-        flagsRow.Controls.Add(chkReconnect);
-        flagsRow.Controls.Add(new Label { Text = "Delay (ms):", AutoSize = true, Margin = new Padding(12, 5, 4, 3) });
-        flagsRow.Controls.Add(numReconnectMs);
-        outGrid.Controls.Add(flagsRow, 0, 2);
-        outGrid.SetColumnSpan(flagsRow, 2);
-
-        outGroup.Controls.Add(outGrid);
-
-        outerTable.Controls.Add(connGroup, 0, 0);
-        outerTable.Controls.Add(outGroup, 1, 0);
-        panel.Controls.Add(outerTable);
-        return panel;
-    }
-
-    private void ToggleSettings()
-    {
-        _settingsExpanded = !_settingsExpanded;
-        _settingsPanel.Visible = _settingsExpanded;
-        _btnToggleSettings.Text = _settingsExpanded ? "⚙ Settings ▾" : "⚙ Settings ▸";
     }
 
     // ── Dark mode theming ────────────────────────────────────────────────
@@ -427,77 +258,12 @@ internal class MainForm : Form
         _btnDarkMode.Text = isDark ? "☀ Light" : "🌙 Dark";
 
         var formBg  = isDark ? AppTheme.DarkFormBg  : AppTheme.LightFormBg;
-        var panelBg = AppTheme.PanelBg(isDark);
-        var inputBg = AppTheme.InputBg(isDark);
-        var inputFg = AppTheme.InputFg(isDark);
-        var labelFg = AppTheme.LabelFg(isDark);
-        var mutedFg = AppTheme.MutedFg(isDark);
 
         BackColor = formBg;
-        _settingsPanel.BackColor = panelBg;
-        ApplyThemeToChildren(_settingsPanel, panelBg, inputBg, inputFg, labelFg);
 
         foreach (var tab in _detailTabs)
             tab.ApplyTheme(isDark);
         _overviewTab.ApplyTheme(isDark);
-    }
-
-    private static void ApplyThemeToChildren(
-        Control parent,
-        Color panelBg,
-        Color inputBg,
-        Color inputFg,
-        Color labelFg)
-    {
-        foreach (Control child in parent.Controls)
-        {
-            switch (child)
-            {
-                case ComboBox cb:
-                    cb.BackColor = inputBg;
-                    cb.ForeColor = inputFg;
-                    break;
-                case TextBox tb:
-                    tb.BackColor = inputBg;
-                    tb.ForeColor = inputFg;
-                    break;
-                case NumericUpDown nud:
-                    nud.BackColor = inputBg;
-                    nud.ForeColor = inputFg;
-                    break;
-                case CheckBox chk:
-                    chk.ForeColor = labelFg;
-                    break;
-                case GroupBox gb:
-                    gb.ForeColor = labelFg;
-                    gb.BackColor = panelBg;
-                    break;
-                case Label lbl:
-                    lbl.ForeColor = labelFg;
-                    break;
-                case TableLayoutPanel tlp:
-                    tlp.BackColor = panelBg;
-                    break;
-                case FlowLayoutPanel flp:
-                    flp.BackColor = panelBg;
-                    break;
-                case Panel pnl:
-                    pnl.BackColor = panelBg;
-                    break;
-            }
-
-            if (child.HasChildren)
-                ApplyThemeToChildren(child, panelBg, inputBg, inputFg, labelFg);
-        }
-    }
-
-    private static void AddLabeled(TableLayoutPanel grid, string label, Control control, int col, int row)
-    {
-        var lbl = new Label { Text = label, AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
-        grid.Controls.Add(lbl, col, row);
-        control.Dock = DockStyle.Top;
-        control.Margin = new Padding(3, 3, 10, 8);
-        grid.Controls.Add(control, col, row + 1);
     }
 
     private void SetLifecycleState(CaptureLifecycleState state, string? detail = null)
@@ -518,99 +284,22 @@ internal class MainForm : Form
         _lblStatusDetail.ForeColor = state == CaptureLifecycleState.Error
             ? Color.FromArgb(255, 120, 120)
             : Color.FromArgb(180, 220, 255);
-    }
 
-    private void LoadDefaults()
-    {
-        cbBaud.Items.AddRange(new object[] { "1200", "2400", "4800", "9600", "19200", "38400", "57600", "115200" });
-        cbBaud.Text = "9600";
-
-        cbParity.Items.AddRange(Enum.GetNames(typeof(Parity)));
-        cbParity.Text = Parity.None.ToString();
-
-        cbDataBits.Items.AddRange(new object[] { "5", "6", "7", "8" });
-        cbDataBits.Text = "8";
-
-        cbStopBits.Items.AddRange(Enum.GetNames(typeof(StopBits)));
-        cbStopBits.Text = StopBits.One.ToString();
-
-        cbHandshake.Items.AddRange(Enum.GetNames(typeof(Handshake)));
-        cbHandshake.Text = Handshake.None.ToString();
-
-        txtOutDir.Text = Path.Combine(AppContext.BaseDirectory, "logs");
-        txtPrefix.Text = "cadex_raw";
-        chkCsv.Checked = false;
-        chkReconnect.Checked = true;
-        numReconnectMs.Value = 2000;
-    }
-
-    private void RefreshPorts()
-    {
-        var selected = cbPort.Text;
-        cbPort.Items.Clear();
-
-        var ports = SerialPort.GetPortNames().OrderBy(p => p, StringComparer.OrdinalIgnoreCase).ToArray();
-        cbPort.Items.AddRange(ports);
-
-        if (!string.IsNullOrWhiteSpace(selected) && ports.Contains(selected, StringComparer.OrdinalIgnoreCase))
-            cbPort.Text = selected;
-        else if (ports.Length > 0)
-            cbPort.Text = ports[0];
-        else
-            cbPort.Text = string.Empty;
-    }
-
-    private void BrowseOutDir()
-    {
-        using var dlg = new FolderBrowserDialog();
-        dlg.SelectedPath = Directory.Exists(txtOutDir.Text) ? txtOutDir.Text : AppContext.BaseDirectory;
-        if (dlg.ShowDialog(this) == DialogResult.OK)
-            txtOutDir.Text = dlg.SelectedPath;
-    }
-
-    private AppOptions BuildOptionsFromUi()
-    {
-        if (string.IsNullOrWhiteSpace(cbPort.Text))
-            throw new InvalidOperationException("Please select a COM port.");
-
-        if (!int.TryParse(cbBaud.Text, out var baud) || baud <= 0)
-            throw new InvalidOperationException("Invalid baud rate.");
-
-        if (!int.TryParse(cbDataBits.Text, out var dataBits) || dataBits is < 5 or > 8)
-            throw new InvalidOperationException("Data bits must be between 5 and 8.");
-
-        if (!Enum.TryParse<Parity>(cbParity.Text, true, out var parity))
-            throw new InvalidOperationException("Invalid parity value.");
-
-        if (!Enum.TryParse<StopBits>(cbStopBits.Text, true, out var stopBits))
-            throw new InvalidOperationException("Invalid stop bits value.");
-
-        if (!Enum.TryParse<Handshake>(cbHandshake.Text, true, out var handshake))
-            throw new InvalidOperationException("Invalid handshake value.");
-
-        var outDir = txtOutDir.Text.Trim();
-        if (string.IsNullOrWhiteSpace(outDir))
-            throw new InvalidOperationException("Please select an output folder.");
-
-        var prefix = txtPrefix.Text.Trim();
-        if (string.IsNullOrWhiteSpace(prefix))
-            prefix = "cadex_raw";
-
-        return new AppOptions
+        // Update status strip (bottom bar) with a friendly connection status
+        if (_statusStripLabel is not null)
         {
-            Port = cbPort.Text.Trim(),
-            Baud = baud,
-            Parity = parity,
-            DataBits = dataBits,
-            StopBits = stopBits,
-            Handshake = handshake,
-            OutDir = outDir,
-            Prefix = prefix,
-            Csv = chkCsv.Checked,
-            Reconnect = chkReconnect.Checked,
-            ReconnectDelayMs = (int)numReconnectMs.Value,
-            ListPorts = false
-        };
+            _statusStripLabel.Text = state switch
+            {
+                CaptureLifecycleState.Running =>
+                    _simulationMode
+                        ? "🟢 Connected: Demo Mode"
+                        : $"🟢 Connected: {_currentOptions.Port} ({_currentOptions.Baud})",
+                CaptureLifecycleState.Starting => "🟡 Connecting…",
+                CaptureLifecycleState.Stopping => "🟡 Disconnecting…",
+                CaptureLifecycleState.Error    => "🔴 Error",
+                _                              => "🔴 Disconnected",
+            };
+        }
     }
 
     private async Task StartCaptureAsync()
@@ -618,7 +307,6 @@ internal class MainForm : Form
         if (_captureTask is not null)
             return;
 
-        SetRunningState(true);
         SetLifecycleState(CaptureLifecycleState.Starting);
 
         try
@@ -627,7 +315,7 @@ internal class MainForm : Form
 
             _cts = new CancellationTokenSource();
 
-            if (chkSimulation.Checked)
+            if (_simulationMode)
             {
                 AppLog.Info("Starting simulation mode");
                 var sim = new SimulationService(
@@ -639,10 +327,9 @@ internal class MainForm : Form
             }
             else
             {
-                var options = BuildOptionsFromUi();
-                AppLog.Info($"Starting capture on {options.Port} @ {options.Baud} baud");
+                AppLog.Info($"Starting capture on {_currentOptions.Port} @ {_currentOptions.Baud} baud");
                 var service = new SerialCaptureService(
-                    options,
+                    _currentOptions,
                     _sink,
                     onData: null,
                     onStatus: SetStatus,
@@ -666,15 +353,15 @@ internal class MainForm : Form
 
     private ILineSink CreateSink()
     {
-        var outDir = txtOutDir.Text.Trim();
+        var outDir = _currentOptions.OutDir?.Trim();
         if (string.IsNullOrWhiteSpace(outDir))
             throw new InvalidOperationException("Please select an output folder.");
 
-        var prefix = txtPrefix.Text.Trim();
+        var prefix = _currentOptions.Prefix?.Trim();
         if (string.IsNullOrWhiteSpace(prefix))
             prefix = "cadex_raw";
 
-        return chkCsv.Checked
+        return _currentOptions.Csv
             ? new CsvLineSink(outDir, prefix)
             : new RawLineSink(outDir, prefix);
     }
@@ -683,18 +370,6 @@ internal class MainForm : Form
     {
         // All state mutations and UI updates happen on the UI thread to avoid data races.
         BeginInvoke(() => _stateManager.ProcessLine(line));
-    }
-
-    private void OnSimulationCheckedChanged(object? sender, EventArgs e)
-    {
-        bool sim = chkSimulation.Checked;
-        cbPort.Enabled          = !sim;
-        cbBaud.Enabled          = !sim;
-        cbParity.Enabled        = !sim;
-        cbDataBits.Enabled      = !sim;
-        cbStopBits.Enabled      = !sim;
-        cbHandshake.Enabled     = !sim;
-        btnRefreshPorts.Enabled = !sim;
     }
 
     private async Task StopCaptureAsync()
@@ -734,31 +409,10 @@ internal class MainForm : Form
         sink?.Dispose();
 
         AppLog.Info("Capture stopped");
-        SetRunningState(false);
 
         // Preserve error state visibility; only reset to Idle on a clean stop.
         if (_lifecycleState != CaptureLifecycleState.Error)
             SetLifecycleState(CaptureLifecycleState.Idle, "Stopped");
-    }
-
-    private void SetRunningState(bool running)
-    {
-        btnStart.Enabled = !running;
-        btnStop.Enabled = running;
-        chkSimulation.Enabled = !running;
-        btnRefreshPorts.Enabled = !running && !chkSimulation.Checked;
-        cbPort.Enabled = !running && !chkSimulation.Checked;
-        cbBaud.Enabled = !running && !chkSimulation.Checked;
-        cbParity.Enabled = !running && !chkSimulation.Checked;
-        cbDataBits.Enabled = !running && !chkSimulation.Checked;
-        cbStopBits.Enabled = !running && !chkSimulation.Checked;
-        cbHandshake.Enabled = !running && !chkSimulation.Checked;
-        txtOutDir.Enabled = !running;
-        btnBrowse.Enabled = !running;
-        txtPrefix.Enabled = !running;
-        chkCsv.Enabled = !running;
-        chkReconnect.Enabled = !running;
-        numReconnectMs.Enabled = !running;
     }
 
     /// <summary>
@@ -780,29 +434,35 @@ internal class MainForm : Form
 
     private void ApplyStartupDefaults(AppOptions opts)
     {
-        if (!string.IsNullOrWhiteSpace(opts.Port))
-            cbPort.Text = opts.Port;
+        _currentOptions = opts;
+    }
 
-        if (opts.Baud > 0)
-            cbBaud.Text = opts.Baud.ToString();
+    /// <summary>
+    /// Opens the Connection Settings popup.  Handles Connect / Disconnect actions
+    /// returned from the dialog and starts or stops the serial capture accordingly.
+    /// </summary>
+    private void OpenConnectionSettings()
+    {
+        bool isRunning = _captureTask is not null;
+        using var form = new ConnectionSettingsForm(_currentOptions, isRunning, _simulationMode);
+        form.ShowDialog(this);
 
-        cbParity.Text    = opts.Parity.ToString();
-        cbDataBits.Text  = opts.DataBits.ToString();
-        cbStopBits.Text  = opts.StopBits.ToString();
-        cbHandshake.Text = opts.Handshake.ToString();
+        switch (form.Action)
+        {
+            case ConnectionAction.Connect:
+                _currentOptions  = form.GetOptions();
+                _simulationMode  = form.SimulationMode;
+                _ = StartCaptureAsync().ContinueWith(
+                    t => AppLog.Error("StartCaptureAsync error", t.Exception?.InnerException ?? t.Exception!),
+                    TaskContinuationOptions.OnlyOnFaulted);
+                break;
 
-        if (!string.IsNullOrWhiteSpace(opts.OutDir))
-            txtOutDir.Text = opts.OutDir;
-
-        if (!string.IsNullOrWhiteSpace(opts.Prefix))
-            txtPrefix.Text = opts.Prefix;
-
-        chkCsv.Checked       = opts.Csv;
-        chkReconnect.Checked = opts.Reconnect;
-
-        if (opts.ReconnectDelayMs >= (int)numReconnectMs.Minimum &&
-            opts.ReconnectDelayMs <= (int)numReconnectMs.Maximum)
-            numReconnectMs.Value = opts.ReconnectDelayMs;
+            case ConnectionAction.Disconnect:
+                _ = StopCaptureAsync().ContinueWith(
+                    t => AppLog.Error("StopCaptureAsync error", t.Exception?.InnerException ?? t.Exception!),
+                    TaskContinuationOptions.OnlyOnFaulted);
+                break;
+        }
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
