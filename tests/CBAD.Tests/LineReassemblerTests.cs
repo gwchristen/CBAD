@@ -50,11 +50,15 @@ public class LineReassemblerTests
     {
         var r = new LineReassembler();
         r.Feed("par");
-        r.Feed("t1\npar");
-        var lines = r.Feed("t2\n");
-        Assert.Equal(2, lines.Count);
-        Assert.Equal("part1", lines[0]);
-        Assert.Equal("part2", lines[1]);
+        var second = r.Feed("t1\npar");
+        var third  = r.Feed("t2\n");
+
+        // "part1" completes on the second Feed call; "part2" completes on the third.
+        Assert.Single(second);
+        Assert.Equal("part1", second[0]);
+
+        Assert.Single(third);
+        Assert.Equal("part2", third[0]);
     }
 
     [Fact]

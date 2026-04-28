@@ -37,10 +37,10 @@ public class CadexEventParserTests
     [Fact]
     public void Describe_UnknownCode_ReturnsFallback()
     {
+        // Truly unknown codes use the fallback "Event {code}" format.
         Assert.Equal("Event 999", CadexEventParser.Describe(999));
-        Assert.Equal("Event 0",   CadexEventParser.Describe(0) == "Station Off Line"
-            ? "Station Off Line"  // known code – verifies fallback isn't used
-            : "Event 0");
+        // Code 0 is a known code – it returns the proper description, not the fallback.
+        Assert.Equal("Station Off Line", CadexEventParser.Describe(0));
     }
 
     [Fact]

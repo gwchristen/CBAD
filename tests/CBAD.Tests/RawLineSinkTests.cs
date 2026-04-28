@@ -21,12 +21,15 @@ public class RawLineSinkTests : IDisposable
     [Fact]
     public void WrittenData_AppearsWithTimestampPrefix()
     {
-        using var sink = new RawLineSink(_tempDir, "test");
         var ts = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
+        string path;
+        using (var sink = new RawLineSink(_tempDir, "test"))
+        {
+            sink.Write(ts, "some data");
+            path = sink.Path;
+        }
 
-        sink.Write(ts, "some data");
-
-        var content = File.ReadAllText(sink.Path);
+        var content = File.ReadAllText(path);
         Assert.StartsWith($"[{ts:O}] some data", content);
     }
 
