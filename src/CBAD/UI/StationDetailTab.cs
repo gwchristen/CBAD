@@ -662,6 +662,55 @@ internal sealed class StationDetailTab : UserControl
 
         if (chartable.Count > 0)
         {
+            // Phase shading: draw colored VSpan backgrounds for each ProcessCode
+            // block before adding scatter plots so the shading renders behind the
+            // data lines.
+            var phaseRecords = chartable
+                .Where(r => r.ProcessCode.HasValue)
+                .ToList();
+
+            if (phaseRecords.Count > 0)
+            {
+                int currentCode    = phaseRecords[0].ProcessCode!.Value;
+                DateTimeOffset spanStart = phaseRecords[0].ReceivedAt;
+
+                for (int i = 1; i <= phaseRecords.Count; i++)
+                {
+                    bool isLast   = i == phaseRecords.Count;
+                    int? nextCode = isLast ? null : phaseRecords[i].ProcessCode!.Value;
+
+                    if (nextCode == null || nextCode != currentCode)
+                    {
+                        DateTimeOffset spanEnd = isLast
+                            ? phaseRecords[i - 1].ReceivedAt
+                            : phaseRecords[i].ReceivedAt;
+
+                        ScottPlot.Color? fillColor = currentCode switch
+                        {
+                            2  => ScottPlot.Colors.LightGreen.WithAlpha(0.2f),  // Charge
+                            7  => ScottPlot.Colors.LightCoral.WithAlpha(0.2f),  // Discharge
+                            19 => ScottPlot.Colors.LightGray.WithAlpha(0.2f),   // Resting/Wait
+                            _  => null,
+                        };
+
+                        if (fillColor.HasValue)
+                        {
+                            var vspan = plot.Add.VerticalSpan(
+                                spanStart.DateTime.ToOADate(),
+                                spanEnd.DateTime.ToOADate());
+                            vspan.FillColor = fillColor.Value;
+                            vspan.LineWidth = 0;
+                        }
+
+                        if (nextCode != null)
+                        {
+                            currentCode = nextCode.Value;
+                            spanStart   = phaseRecords[i].ReceivedAt;
+                        }
+                    }
+                }
+            }
+
             var voltageXs = chartable.Select(r => r.ReceivedAt.DateTime.ToOADate()).ToArray();
             var voltageYs = chartable.Select(r => (double)r.VoltageMv!.Value).ToArray();
             var voltageScatter = plot.Add.Scatter(voltageXs, voltageYs);
