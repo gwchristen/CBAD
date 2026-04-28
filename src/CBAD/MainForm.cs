@@ -452,11 +452,15 @@ internal class MainForm : Form
             case ConnectionAction.Connect:
                 _currentOptions  = form.GetOptions();
                 _simulationMode  = form.SimulationMode;
-                _ = StartCaptureAsync();
+                _ = StartCaptureAsync().ContinueWith(
+                    t => AppLog.Error("StartCaptureAsync error", t.Exception?.InnerException ?? t.Exception!),
+                    TaskContinuationOptions.OnlyOnFaulted);
                 break;
 
             case ConnectionAction.Disconnect:
-                _ = StopCaptureAsync();
+                _ = StopCaptureAsync().ContinueWith(
+                    t => AppLog.Error("StopCaptureAsync error", t.Exception?.InnerException ?? t.Exception!),
+                    TaskContinuationOptions.OnlyOnFaulted);
                 break;
         }
     }

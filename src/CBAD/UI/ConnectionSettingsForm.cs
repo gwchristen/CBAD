@@ -236,8 +236,6 @@ internal class ConnectionSettingsForm : Form
         delayRow.Controls.Add(new Label { Text = "Reconnect delay (ms):", AutoSize = true, Margin = new Padding(3, 5, 4, 3) });
         delayRow.Controls.Add(_numReconnectMs);
 
-        // Add the delay row after the checkboxes
-        var delayLabel = new Label { Text = "Reconnect Delay", AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
         grid.Controls.Add(delayRow, 0, 6);
 
         group.Controls.Add(grid);
