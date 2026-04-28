@@ -103,20 +103,33 @@ internal sealed class StationDetailTab : UserControl
         WireClearStation();
         WireChartMouse();
 
-        // ── Outer layout: essentials (top, auto-sized) | chart+stream (bottom, fills remaining) ──
+        // ── Left column: essentials (top, auto-sized) | chart+stream (fill) ──────────────────
         // TableLayoutPanel avoids the WinForms SplitContainer lifecycle problem where
         // SplitterDistance is silently clamped before the control has actual dimensions.
-        var outer = new TableLayoutPanel
+        var mainCol = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 2,
         };
-        outer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-        outer.RowStyles.Add(new RowStyle(SizeType.AutoSize));       // essentials: auto-height
-        outer.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));  // chart/stream: fills rest
-        outer.Controls.Add(BuildEssentialsPanel(), 0, 0);
-        outer.Controls.Add(BuildChartStreamTabs(), 0, 1);
+        mainCol.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        mainCol.RowStyles.Add(new RowStyle(SizeType.AutoSize));       // essentials: auto-height
+        mainCol.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));  // chart/stream: fills rest
+        mainCol.Controls.Add(BuildEssentialsPanel(), 0, 0);
+        mainCol.Controls.Add(BuildChartStreamTabs(), 0, 1);
+
+        // ── Outer layout: main area (left, fill) | record metadata (right, fixed 230px) ──────
+        var outer = new TableLayoutPanel
+        {
+            Dock        = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount    = 1,
+        };
+        outer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));   // main: fills rest
+        outer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 230f));  // metadata: fixed
+        outer.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+        outer.Controls.Add(mainCol, 0, 0);
+        outer.Controls.Add(BuildRecordMetadataGroup(), 1, 0);
 
         Controls.Add(outer);
     }
@@ -209,7 +222,6 @@ internal sealed class StationDetailTab : UserControl
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // metrics
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // last update
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 180f));  // adv group
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // record metadata group
 
         layout.Controls.Add(_lblStationBig,  0, 0);
         layout.Controls.Add(_lblBatteryId,   0, 1);
@@ -217,7 +229,6 @@ internal sealed class StationDetailTab : UserControl
         layout.Controls.Add(metricsFlow,     0, 3);
         layout.Controls.Add(_lblLastUpdate,  0, 4);
         layout.Controls.Add(advGroup,        0, 5);
-        layout.Controls.Add(BuildRecordMetadataGroup(), 0, 6);
 
         panel.Controls.Add(layout);
         return panel;
@@ -331,12 +342,10 @@ internal sealed class StationDetailTab : UserControl
     {
         var group = new GroupBox
         {
-            Text         = "Test Record Metadata",
-            Dock         = DockStyle.Fill,
-            AutoSize     = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Padding      = new Padding(8, 20, 8, 8),
-            Margin       = new Padding(0, 8, 0, 4),
+            Text    = "Test Record Metadata",
+            Dock    = DockStyle.Fill,
+            Padding = new Padding(8, 20, 8, 8),
+            Margin  = new Padding(0),
         };
 
         var table = new TableLayoutPanel

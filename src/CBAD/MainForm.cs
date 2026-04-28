@@ -113,6 +113,16 @@ internal class MainForm : Form
 
     private void BuildUi()
     {
+        // ── Status strip (bottom) — added first so it claims the bottom edge ──
+        var statusStrip = new StatusStrip();
+        _statusStripLabel = new ToolStripStatusLabel("🔴 Disconnected")
+        {
+            Spring    = true,
+            TextAlign = ContentAlignment.MiddleLeft,
+        };
+        statusStrip.Items.Add(_statusStripLabel);
+        Controls.Add(statusStrip);
+
         // ── Menu strip (top) ─────────────────────────────────────────────
         var menuStrip = new MenuStrip();
 
@@ -135,16 +145,6 @@ internal class MainForm : Form
         menuStrip.Items.Add(recordsMenu);
         Controls.Add(menuStrip);
         MainMenuStrip = menuStrip;
-
-        // ── Status strip (bottom) ────────────────────────────────────────
-        var statusStrip = new StatusStrip();
-        _statusStripLabel = new ToolStripStatusLabel("🔴 Disconnected")
-        {
-            Spring    = true,
-            TextAlign = ContentAlignment.MiddleLeft,
-        };
-        statusStrip.Items.Add(_statusStripLabel);
-        Controls.Add(statusStrip);
 
         // ── Quick-access toolbar (just below menu) ────────────────────────
         Controls.Add(BuildQuickAccessBar());
