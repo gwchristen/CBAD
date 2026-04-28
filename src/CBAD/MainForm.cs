@@ -113,17 +113,49 @@ internal class MainForm : Form
 
     private void BuildUi()
     {
-        // ── Status strip (bottom) — added first so it claims the bottom edge ──
-        var statusStrip = new StatusStrip();
-        _statusStripLabel = new ToolStripStatusLabel("🔴 Disconnected")
-        {
-            Spring    = true,
-            TextAlign = ContentAlignment.MiddleLeft,
-        };
-        statusStrip.Items.Add(_statusStripLabel);
-        Controls.Add(statusStrip);
+        // WinForms docking layout is computed back-to-front in the Controls
+        // collection (highest index first).  The control at the highest index
+        // (back of Z-order / last processed) claims its dock edge first.
+        //
+        // Required processing order:
+        //   1. StatusStrip  → Bottom  (must be first processed → added LAST)
+        //   2. HeaderStrip  → Top     (very top)
+        //   3. MenuStrip    → Top     (directly below HeaderStrip)
+        //   4. LeftPanel    → Left
+        //   5. TabControl   → Fill    (must be last processed → added FIRST)
+        //
+        // Therefore Controls.Add() order is the REVERSE of the above:
+        //   Controls.Add(tabs)         → index 0  (front, docked last  = Fill)
+        //   Controls.Add(leftPanel)    → index 1
+        //   Controls.Add(menuStrip)    → index 2
+        //   Controls.Add(headerStrip)  → index 3
+        //   Controls.Add(statusStrip)  → index 4  (back,  docked first = Bottom)
 
-        // ── Menu strip (top) ─────────────────────────────────────────────
+        // ── Tab control — added FIRST so it ends up at the front (index 0) ──
+        // It will be laid out last and correctly fills all remaining space.
+        var tabs = new TabControl { Dock = DockStyle.Fill };
+
+        _overviewTab = new OverviewTab();
+        var tabOverview = new TabPage("Overview");
+        tabOverview.Controls.Add(_overviewTab);
+        tabs.TabPages.Add(tabOverview);
+
+        _detailTabs = new StationDetailTab[4];
+        for (int i = 0; i < 4; i++)
+        {
+            _detailTabs[i] = new StationDetailTab(i + 1);
+            var tp = new TabPage($"Station {i + 1}");
+            tp.Controls.Add(_detailTabs[i]);
+            tabs.TabPages.Add(tp);
+        }
+
+        Controls.Add(tabs);  // index 0
+
+        // ── Left panel — global metadata (fixed 250px, docked Left) ─────
+        _leftPanel = BuildGlobalMetadataPanel();
+        Controls.Add(_leftPanel);  // index 1
+
+        // ── Menu strip (top, below HeaderStrip) ──────────────────────────
         var menuStrip = new MenuStrip();
 
         var connectionsMenu = new ToolStripMenuItem("Connections");
@@ -143,40 +175,28 @@ internal class MainForm : Form
         menuStrip.Items.Add(connectionsMenu);
         menuStrip.Items.Add(settingsMenu);
         menuStrip.Items.Add(recordsMenu);
-        Controls.Add(menuStrip);
+        Controls.Add(menuStrip);  // index 2
         MainMenuStrip = menuStrip;
 
         // ── Header strip (title/status row + quick-access toolbar row) ──────
-        Controls.Add(BuildHeaderStrip());
+        Controls.Add(BuildHeaderStrip());  // index 3
 
-        // ── Left panel — global metadata (fixed 250px, docked Left) ─────
-        _leftPanel = BuildGlobalMetadataPanel();
-        Controls.Add(_leftPanel);
-
-        // ── Tab control — fills all remaining space (right of left panel) ──
-        var tabs = new TabControl { Dock = DockStyle.Fill };
-
-        _overviewTab = new OverviewTab();
-        var tabOverview = new TabPage("Overview");
-        tabOverview.Controls.Add(_overviewTab);
-        tabs.TabPages.Add(tabOverview);
-
-        _detailTabs = new StationDetailTab[4];
-        for (int i = 0; i < 4; i++)
+        // ── Status strip (bottom) — added LAST so it ends up at the back ──
+        // It will be laid out first and correctly claims the bottom edge.
+        var statusStrip = new StatusStrip();
+        _statusStripLabel = new ToolStripStatusLabel("🔴 Disconnected")
         {
-            _detailTabs[i] = new StationDetailTab(i + 1);
-            var tp = new TabPage($"Station {i + 1}");
-            tp.Controls.Add(_detailTabs[i]);
-            tabs.TabPages.Add(tp);
-        }
-
-        Controls.Add(tabs);
+            Spring    = true,
+            TextAlign = ContentAlignment.MiddleLeft,
+        };
+        statusStrip.Items.Add(_statusStripLabel);
+        Controls.Add(statusStrip);  // index 4
     }
 
     // ── Header strip: title/status row + quick-access toolbar row ────────
-    // Two-row panel so the form has exactly 5 top-level docked controls in
-    // the correct order: StatusStrip(Bottom) → MenuStrip(Top) →
-    // HeaderStrip(Top) → LeftPanel(Left) → TabControl(Fill).
+    // Two-row panel docked to the Top of the form.  It occupies the very top
+    // because the Controls.Add() order in BuildUi() places it at index 3
+    // (processed second from back), directly above the MenuStrip (index 2).
     private Panel BuildHeaderStrip()
     {
         // Outer panel contains two horizontal bands stacked vertically:
