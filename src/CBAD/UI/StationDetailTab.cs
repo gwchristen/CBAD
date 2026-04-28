@@ -966,6 +966,16 @@ internal sealed class StationDetailTab : UserControl
                     chk.ForeColor = AppTheme.LabelFg(isDark);
                     chk.BackColor = AppTheme.PanelBg(isDark);
                 }
+                else if (c is Button btn && btn == _btnCommitRecord)
+                {
+                    btn.BackColor = isDark
+                        ? System.Drawing.Color.FromArgb(25, 75, 145)
+                        : System.Drawing.Color.FromArgb(30, 100, 180);
+                    btn.ForeColor = System.Drawing.Color.White;
+                    btn.FlatAppearance.BorderColor = isDark
+                        ? System.Drawing.Color.FromArgb(15, 55, 110)
+                        : System.Drawing.Color.FromArgb(20, 70, 140);
+                }
             }
         }
     }

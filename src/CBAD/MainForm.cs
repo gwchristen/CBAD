@@ -36,6 +36,8 @@ internal class MainForm : Form
     private readonly TextBox _txtAnalyzerModel   = new() { Text = "Cadex C7x00", PlaceholderText = "e.g. Cadex C7x00" };
     private readonly TextBox _txtAnalyzerSerial  = new() { PlaceholderText = "Analyzer serial #" };
     private Panel? _leftPanel;
+    private GroupBox? _globalMetadataGroup;
+    private TableLayoutPanel? _globalMetadataLayout;
 
     // Status strip (bottom of form)
     private ToolStripStatusLabel _statusStripLabel = null!;
@@ -352,7 +354,7 @@ internal class MainForm : Form
         {
             Dock      = DockStyle.Left,
             Width     = 250,
-            BackColor = Color.FromArgb(240, 243, 248),
+            BackColor = AppTheme.LightPanelBg,
             Padding   = new Padding(8, 8, 8, 8),
         };
 
@@ -399,6 +401,10 @@ internal class MainForm : Form
 
         group.Controls.Add(layout);
         panel.Controls.Add(group);
+
+        _globalMetadataGroup  = group;
+        _globalMetadataLayout = layout;
+
         return panel;
     }
 
@@ -469,31 +475,30 @@ internal class MainForm : Form
 
         BackColor = formBg;
 
-        // Theme the global metadata left panel
+        // Theme the global metadata left panel — targeted per control type
         if (_leftPanel != null)
-        {
             _leftPanel.BackColor = AppTheme.PanelBg(isDark);
-            foreach (Control c in _leftPanel.Controls)
+
+        if (_globalMetadataGroup != null)
+        {
+            _globalMetadataGroup.BackColor = AppTheme.PanelBg(isDark);
+            _globalMetadataGroup.ForeColor = AppTheme.LabelFg(isDark);
+        }
+
+        if (_globalMetadataLayout != null)
+        {
+            _globalMetadataLayout.BackColor = AppTheme.PanelBg(isDark);
+            foreach (Control c in _globalMetadataLayout.Controls)
             {
-                c.BackColor = AppTheme.PanelBg(isDark);
-                c.ForeColor = AppTheme.LabelFg(isDark);
-                foreach (Control child in c.Controls)
+                if (c is TextBox txt)
                 {
-                    child.BackColor = AppTheme.PanelBg(isDark);
-                    child.ForeColor = AppTheme.LabelFg(isDark);
-                    foreach (Control grandchild in child.Controls)
-                    {
-                        if (grandchild is TextBox txt)
-                        {
-                            txt.BackColor = AppTheme.InputBg(isDark);
-                            txt.ForeColor = AppTheme.InputFg(isDark);
-                        }
-                        else
-                        {
-                            grandchild.BackColor = AppTheme.PanelBg(isDark);
-                            grandchild.ForeColor = AppTheme.LabelFg(isDark);
-                        }
-                    }
+                    txt.BackColor = AppTheme.InputBg(isDark);
+                    txt.ForeColor = AppTheme.InputFg(isDark);
+                }
+                else if (c is Label lbl)
+                {
+                    lbl.BackColor = AppTheme.PanelBg(isDark);
+                    lbl.ForeColor = AppTheme.LabelFg(isDark);
                 }
             }
         }
