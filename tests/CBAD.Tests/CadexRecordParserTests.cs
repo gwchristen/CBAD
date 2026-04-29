@@ -184,6 +184,7 @@ public class CadexRecordParserTests
         Assert.Equal("Prime", CadexStatusCodes.Describe("4"));
         Assert.Equal("Ready (Trickle)", CadexStatusCodes.Describe("5"));
         Assert.Equal("Discharging", CadexStatusCodes.Describe("7"));
+        Assert.Equal("Resting", CadexStatusCodes.Describe("19"));
         Assert.Equal("QuickTest Complete", CadexStatusCodes.Describe("35"));
         Assert.Equal("Process 99", CadexStatusCodes.Describe("99"));
         Assert.Equal("—", CadexStatusCodes.Describe(null));

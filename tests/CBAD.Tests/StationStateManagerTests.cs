@@ -250,4 +250,55 @@ public class StationStateManagerTests
         // LastActiveEventCode should still be 27 (the ohm test), not 116
         Assert.Equal(27, mgr.GetState(1).LastActiveEventCode);
     }
+
+    [Fact]
+    public void ProcessLine_Code16_AfterCode129_ThenCode19_SetsIntermittentReason()
+    {
+        // Reproduces the real-world scenario: Cadex emits a fault indicator code
+        // (129 Intermittent Battery), then a status event (19 Resting), then the
+        // final failure code (16 Custom Program Has Failed).  Without the sticky
+        // LastFaultEventCode the status event would overwrite the fault breadcrumb
+        // and the failure reason would degrade to the generic "Program Failed".
+        var mgr = new StationStateManager();
+        var faultLine  = @"0,1,""          "",""04/27/2026"",""143255"",129,""7\1419\-401\35"",""85\37""";
+        var restLine   = @"0,1,""          "",""04/27/2026"",""143256"",19,""19\1419\0\35"",""85\37""";
+        var failLine   = @"0,1,""          "",""04/27/2026"",""143257"",16,""19\1419\0\35"",""85\37""";
+
+        mgr.ProcessLine(faultLine);
+        mgr.ProcessLine(restLine);
+        mgr.ProcessLine(failLine);
+
+        Assert.Equal("Intermittent Battery", mgr.GetState(1).FailureReason);
+    }
+
+    [Fact]
+    public void ProcessLine_Code116_AfterCode115_ThenCode19_SetsTargetCapacityReason()
+    {
+        // Same scenario with code 115 (Target Capacity Not Met) followed by a
+        // resting event before the 116 failure.
+        var mgr = new StationStateManager();
+        var capLine  = @"0,1,""          "",""04/27/2026"",""143255"",115,""7\1419\-401\35"",""85\37""";
+        var restLine = @"0,1,""          "",""04/27/2026"",""143256"",19,""19\1419\0\35"",""85\37""";
+        var failLine = @"0,1,""          "",""04/27/2026"",""143257"",116,""7\1419\-401\35"",""85\37""";
+
+        mgr.ProcessLine(capLine);
+        mgr.ProcessLine(restLine);
+        mgr.ProcessLine(failLine);
+
+        Assert.Equal("Target Capacity Not Met", mgr.GetState(1).FailureReason);
+    }
+
+    [Fact]
+    public void ProcessLine_SessionStartCode_ClearsStickyFaultCode()
+    {
+        var mgr = new StationStateManager();
+        // Set up a fault code
+        mgr.ProcessLine(@"0,1,""          "",""04/27/2026"",""143255"",129,""7\1419\-401\35"",""85\37""");
+        Assert.Equal(129, mgr.GetState(1).LastFaultEventCode);
+
+        // A new session start should clear the sticky fault
+        mgr.ProcessLine(@"0,1,""          "",""04/27/2026"",""150000"",20,""0\80""");
+        Assert.Null(mgr.GetState(1).LastFaultEventCode);
+        Assert.Null(mgr.GetState(1).LastFaultRecord);
+    }
 }
