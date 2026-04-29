@@ -920,7 +920,14 @@ internal sealed class StationDetailTab : UserControl
         _crosshair.VerticalLine.Color   = ScottPlot.Colors.Gray.WithAlpha(0.6f);
 
         plot.Axes.DateTimeTicksBottom();
-        _formsPlot.Refresh();
+
+        // WinForms hidden tabs have Width/Height of 0. Refreshing a 0x0 chart
+        // corrupts ScottPlot's internal axis math. Only refresh when the control
+        // is actually visible and has real dimensions.
+        if (_formsPlot.Width > 0 && _formsPlot.Height > 0)
+        {
+            _formsPlot.Refresh();
+        }
 
         // Stream: update display only when not paused.
         if (!_streamPaused)
