@@ -11,6 +11,7 @@ internal static class CadexStatusCodes
         { "4",  "Prime" },
         { "5",  "Ready (Trickle)" },
         { "7",  "Discharging" },
+        { "19", "Resting" },
         { "35", "QuickTest Complete" },
     };
 

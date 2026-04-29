@@ -846,6 +846,7 @@ internal sealed class StationDetailTab : UserControl
             voltageScatter.Color      = ScottPlot.Colors.DeepSkyBlue;
             voltageScatter.LineWidth  = 2;
             voltageScatter.MarkerSize = 0;
+            voltageScatter.Axes.YAxis = plot.Axes.Left;
 
             var healthPoints = chartable.Where(r => r.HealthCurrent.HasValue).ToList();
             if (healthPoints.Count > 0)
@@ -861,12 +862,13 @@ internal sealed class StationDetailTab : UserControl
             }
 
             // Current (mA) line on the dedicated third axis.
+            double[]? currentYsForAxis = null;
             var currentPoints = chartable.Where(r => r.CurrentMa.HasValue).ToList();
             if (currentPoints.Count > 0 && _currentAxis is not null)
             {
                 var currentXs = currentPoints.Select(r => r.ReceivedAt.DateTime.ToOADate()).ToArray();
-                var currentYs = currentPoints.Select(r => (double)r.CurrentMa!.Value).ToArray();
-                var currentScatter = plot.Add.Scatter(currentXs, currentYs);
+                currentYsForAxis = currentPoints.Select(r => (double)r.CurrentMa!.Value).ToArray();
+                var currentScatter = plot.Add.Scatter(currentXs, currentYsForAxis);
                 currentScatter.LegendText = "Current (mA)";
                 currentScatter.Color      = ScottPlot.Colors.Orange;
                 currentScatter.LineWidth  = 2;
@@ -874,10 +876,31 @@ internal sealed class StationDetailTab : UserControl
                 currentScatter.Axes.YAxis = _currentAxis;
             }
 
+            // AutoScale fits the X (time) axis to the data range.  Then override
+            // each Y axis with tight, data-driven limits so that voltage and current
+            // are not compressed onto a 0-based or shared scale.
             plot.Axes.AutoScale();
+
+            double vMin  = voltageYs.Min();
+            double vMax  = voltageYs.Max();
+            double vPad  = Math.Max((vMax - vMin) * 0.05, 50.0);
+            plot.Axes.Left.Min = vMin - vPad;
+            plot.Axes.Left.Max = vMax + vPad;
+
             // Lock the health axis to 0–100 %
             plot.Axes.Right.Min = 0;
             plot.Axes.Right.Max = 100;
+
+            // Set tight limits on the current axis so it scales independently
+            // from the voltage axis.
+            if (currentYsForAxis is not null && _currentAxis is not null)
+            {
+                double cMin = currentYsForAxis.Min();
+                double cMax = currentYsForAxis.Max();
+                double cPad = Math.Max((cMax - cMin) * 0.05, 50.0);
+                _currentAxis.Min = cMin - cPad;
+                _currentAxis.Max = cMax + cPad;
+            }
         }
 
         // Re-add crosshair after plot.Clear() (crosshairs are plottables and are

@@ -62,6 +62,8 @@ internal sealed class StationStateManager
             state.FailureReason        = null;
             state.LastActiveEventCode  = null;
             state.LastActiveRecord     = null;
+            state.LastFaultEventCode   = null;
+            state.LastFaultRecord      = null;
         }
 
         // Track the most recent non-telemetry event so that when a failure code
@@ -70,10 +72,17 @@ internal sealed class StationStateManager
         {
             if (CadexEventParser.IsFailureCode(record.EventCode))
             {
-                // Failure event: derive the reason from the preceding event code.
-                var reason = state.LastActiveEventCode.HasValue
-                    ? CadexEventParser.DetermineFailureReason(
-                          state.LastActiveEventCode.Value, state.LastActiveRecord)
+                // Failure event: prefer the sticky fault indicator (if any) over the
+                // generic last-active event, because intermediate status codes such as
+                // code 19 "Resting" can arrive between a fault code and the failure
+                // event and would otherwise erase the true root cause.
+                var faultCode   = state.LastFaultEventCode ?? state.LastActiveEventCode;
+                var faultRecord = state.LastFaultEventCode.HasValue
+                    ? state.LastFaultRecord
+                    : state.LastActiveRecord;
+
+                var reason = faultCode.HasValue
+                    ? CadexEventParser.DetermineFailureReason(faultCode.Value, faultRecord)
                     : null;
 
                 state.FailureReason = reason ?? "Program Failed";
@@ -82,6 +91,15 @@ internal sealed class StationStateManager
             {
                 state.LastActiveEventCode = record.EventCode;
                 state.LastActiveRecord    = record;
+
+                // If this event code is a known fault indicator, keep it sticky so
+                // that subsequent non-fault status events do not overwrite it before
+                // the final failure event (16 / 116) arrives.
+                if (CadexEventParser.DetermineFailureReason(record.EventCode, record) is not null)
+                {
+                    state.LastFaultEventCode = record.EventCode;
+                    state.LastFaultRecord    = record;
+                }
             }
         }
 
