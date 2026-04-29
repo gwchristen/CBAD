@@ -876,23 +876,30 @@ internal sealed class StationDetailTab : UserControl
                 currentScatter.Axes.YAxis = _currentAxis;
             }
 
-            // AutoScale fits the X (time) axis to the data range.  Then override
-            // each Y axis with tight, data-driven limits so that voltage and current
-            // are not compressed onto a 0-based or shared scale.
-            plot.Axes.AutoScale();
+            // Set each axis's limits independently.  Avoid the generic
+            // plot.Axes.AutoScale() because in ScottPlot v5 it can blend limits
+            // across multiple Y axes and cause the Voltage (Left) axis to inherit
+            // the much larger Current (mA) scale.
 
+            // X (time) axis: fit to the data range shared by all series.
+            double xMin   = voltageXs.Min();
+            double xMax   = voltageXs.Max();
+            double xRange = xMax - xMin;
+            double xPad   = xRange > 0 ? xRange * 0.02 : 0.0001;
+            plot.Axes.SetLimitsX(xMin - xPad, xMax + xPad);
+
+            // Voltage (Left axis) — scale ONLY based on voltage data.
             double vMin  = voltageYs.Min();
             double vMax  = voltageYs.Max();
             double vPad  = Math.Max((vMax - vMin) * 0.05, 50.0);
             plot.Axes.Left.Min = vMin - vPad;
             plot.Axes.Left.Max = vMax + vPad;
 
-            // Lock the health axis to 0–100 %
+            // Health (Right axis) — locked to 0–100 %.
             plot.Axes.Right.Min = 0;
             plot.Axes.Right.Max = 100;
 
-            // Set tight limits on the current axis so it scales independently
-            // from the voltage axis.
+            // Current (_currentAxis) — scale ONLY based on current data.
             if (currentYsForAxis is not null && _currentAxis is not null)
             {
                 double cMin = currentYsForAxis.Min();
