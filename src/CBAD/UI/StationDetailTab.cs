@@ -889,15 +889,18 @@ internal sealed class StationDetailTab : UserControl
             plot.Axes.SetLimitsX(xMin - xPad, xMax + xPad);
 
             // Voltage (Left axis) — scale ONLY based on voltage data.
-            double vMin  = voltageYs.Min();
-            double vMax  = voltageYs.Max();
-            double vPad  = Math.Max((vMax - vMin) * 0.05, 50.0);
-            plot.Axes.Left.Min = vMin - vPad;
-            plot.Axes.Left.Max = vMax + vPad;
+            // Use SetLimitsY so ScottPlot 5's render pipeline respects the limits
+            // and does not auto-recalculate them when the tab comes into view.
+            if (voltageYs.Length > 0)
+            {
+                double vMin = voltageYs.Min();
+                double vMax = voltageYs.Max();
+                double vPad = Math.Max((vMax - vMin) * 0.05, 50.0);
+                plot.Axes.SetLimitsY(vMin - vPad, vMax + vPad, plot.Axes.Left);
+            }
 
             // Health (Right axis) — locked to 0–100 %.
-            plot.Axes.Right.Min = 0;
-            plot.Axes.Right.Max = 100;
+            plot.Axes.SetLimitsY(0, 100, plot.Axes.Right);
 
             // Current (_currentAxis) — scale ONLY based on current data.
             if (currentYsForAxis is not null && _currentAxis is not null)
@@ -905,8 +908,7 @@ internal sealed class StationDetailTab : UserControl
                 double cMin = currentYsForAxis.Min();
                 double cMax = currentYsForAxis.Max();
                 double cPad = Math.Max((cMax - cMin) * 0.05, 50.0);
-                _currentAxis.Min = cMin - cPad;
-                _currentAxis.Max = cMax + cPad;
+                plot.Axes.SetLimitsY(cMin - cPad, cMax + cPad, _currentAxis);
             }
         }
 
