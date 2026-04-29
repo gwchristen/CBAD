@@ -800,7 +800,7 @@ internal sealed class StationDetailTab : UserControl
 
         if (chartable.Count > 0)
         {
-            // Phase shading: draw colored VSpan backgrounds for each ProcessCode
+            // Phase shading: draw colored VSpan/HSpan backgrounds for each ProcessCode
             // block before adding scatter plots so the shading renders behind the
             // data lines.
             var phaseRecords = chartable
@@ -833,11 +833,11 @@ internal sealed class StationDetailTab : UserControl
 
                         if (fillColor.HasValue)
                         {
-                            var vspan = plot.Add.VerticalSpan(
+                            var hspan = plot.Add.HorizontalSpan(
                                 spanStart.DateTime.ToOADate(),
                                 spanEnd.DateTime.ToOADate());
-                            vspan.FillColor = fillColor.Value;
-                            vspan.LineWidth = 0;
+                            hspan.FillColor = fillColor.Value;
+                            hspan.LineWidth = 0;
                         }
 
                         if (nextCode != null)
