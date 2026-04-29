@@ -553,7 +553,11 @@ internal sealed class StationDetailTab : UserControl
             var plot = _formsPlot.Plot;
             plot.Clear();
             _crosshair = null;
-            _formsPlot.Refresh();
+            
+            if (_formsPlot.Width > 0 && _formsPlot.Height > 0)
+            {
+                _formsPlot.Refresh();
+            }
 
             // Clear the raw stream display.
             _txtStream.Clear();
@@ -599,7 +603,10 @@ internal sealed class StationDetailTab : UserControl
             if (_crosshair is not null)
             {
                 _crosshair.IsVisible = false;
-                _formsPlot.Refresh();
+                if (_formsPlot.Width > 0 && _formsPlot.Height > 0)
+                {
+                    _formsPlot.Refresh();
+                }
             }
             _lblChartTooltip.Text    = string.Empty;
             _lblChartTooltip.Visible = false;
@@ -641,7 +648,10 @@ internal sealed class StationDetailTab : UserControl
             $"Health: {(nearest.HealthCurrent.HasValue ? $"{nearest.HealthCurrent}%" : "—")}";
         _lblChartTooltip.Visible = true;
 
-        _formsPlot.Refresh();
+        if (_formsPlot.Width > 0 && _formsPlot.Height > 0)
+        {
+            _formsPlot.Refresh();
+        }
     }
 
     private FlowLayoutPanel BuildStreamToolbar()
@@ -846,6 +856,8 @@ internal sealed class StationDetailTab : UserControl
             voltageScatter.Color      = ScottPlot.Colors.DeepSkyBlue;
             voltageScatter.LineWidth  = 2;
             voltageScatter.MarkerSize = 0;
+            
+            // Explicitly map voltage data to the left axis
             voltageScatter.Axes.YAxis = plot.Axes.Left;
 
             var healthPoints = chartable.Where(r => r.HealthCurrent.HasValue).ToList();
@@ -858,6 +870,8 @@ internal sealed class StationDetailTab : UserControl
                 healthScatter.Color      = ScottPlot.Colors.OrangeRed;
                 healthScatter.LineWidth  = 2;
                 healthScatter.MarkerSize = 0;
+                
+                // Explicitly map health data to the default right axis
                 healthScatter.Axes.YAxis = plot.Axes.Right;
             }
 
@@ -873,36 +887,36 @@ internal sealed class StationDetailTab : UserControl
                 currentScatter.Color      = ScottPlot.Colors.Orange;
                 currentScatter.LineWidth  = 2;
                 currentScatter.MarkerSize = 0;
+                
+                // Explicitly map current data to the secondary right axis
                 currentScatter.Axes.YAxis = _currentAxis;
             }
 
-            // Set each axis's limits independently.  Avoid the generic
-            // plot.Axes.AutoScale() because in ScottPlot v5 it can blend limits
-            // across multiple Y axes and cause the Voltage (Left) axis to inherit
-            // the much larger Current (mA) scale.
+            // We CANNOT use plot.Axes.AutoScale() generically. ScottPlot 5's global auto scale 
+            // has a known bug/limitation when calculating scale bounds across multiple disparate Y axes,
+            // resulting in Current limits (45,000) overriding Voltage limits (2,000).
 
-            // X (time) axis: fit to the data range shared by all series.
-            double xMin   = voltageXs.Min();
-            double xMax   = voltageXs.Max();
+            // 1. AutoScale X axis only
+            double xMin = voltageXs.Min();
+            double xMax = voltageXs.Max();
             double xRange = xMax - xMin;
-            double xPad   = xRange > 0 ? xRange * 0.02 : 0.0001;
+            double xPad = xRange > 0 ? xRange * 0.02 : 0.0001;
             plot.Axes.SetLimitsX(xMin - xPad, xMax + xPad);
 
-            // Voltage (Left axis) — scale ONLY based on voltage data.
-            // Use SetLimitsY so ScottPlot 5's render pipeline respects the limits
-            // and does not auto-recalculate them when the tab comes into view.
+            // 2. Lock Voltage (Left) axis
             if (voltageYs.Length > 0)
             {
                 double vMin = voltageYs.Min();
                 double vMax = voltageYs.Max();
                 double vPad = Math.Max((vMax - vMin) * 0.05, 50.0);
+                // MUST use SetLimits so ScottPlot's render engine respects the explicit clamp bounds
                 plot.Axes.SetLimitsY(vMin - vPad, vMax + vPad, plot.Axes.Left);
             }
 
-            // Health (Right axis) — locked to 0–100 %.
+            // 3. Lock Health (Right 1) axis
             plot.Axes.SetLimitsY(0, 100, plot.Axes.Right);
 
-            // Current (_currentAxis) — scale ONLY based on current data.
+            // 4. Lock Current (Right 2) axis
             if (currentYsForAxis is not null && _currentAxis is not null)
             {
                 double cMin = currentYsForAxis.Min();
