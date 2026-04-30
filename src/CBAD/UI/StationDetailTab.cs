@@ -512,7 +512,7 @@ internal sealed class StationDetailTab : UserControl
         var plot = _formsPlot.Plot;
 
         // Axis labels
-        plot.Axes.Bottom.Label.Text = "Time";
+        plot.Axes.Bottom.Label.Text = "Time (minutes)";
         plot.Axes.Left.Label.Text   = "Voltage (mV)";
         plot.Axes.Right.Label.Text  = "Health (%)";
         plot.Axes.Right.IsVisible   = true;
@@ -520,9 +520,6 @@ internal sealed class StationDetailTab : UserControl
         // Second right axis for Current (mA) — sits to the right of the Health axis
         _currentAxis = plot.Axes.AddRightAxis();
         _currentAxis.Label.Text = "Current (mA)";
-
-        // DateTime ticks on the X axis
-        plot.Axes.DateTimeTicksBottom();
 
         // Grid style
         plot.Grid.MajorLineColor = ScottPlot.Colors.LightGray.WithAlpha(0.5f);
@@ -665,25 +662,27 @@ internal sealed class StationDetailTab : UserControl
         var coords = _formsPlot.Plot.GetCoordinates(e.X, e.Y);
         double mouseX = coords.X;
 
-        // Find the nearest plotted data point to the mouse X position.
+        // Find the nearest plotted data point to the mouse X position using index.
         CadexRecord? nearest = null;
+        int idx = 0;
         double minDist = double.MaxValue;
-        foreach (var r in chartable)
+        for (int i = 0; i < chartable.Count; i++)
         {
-            double dist = Math.Abs(r.ReceivedAt.DateTime.ToOADate() - mouseX);
-            if (dist < minDist) { minDist = dist; nearest = r; }
+            double dist = Math.Abs(i - mouseX);
+            if (dist < minDist) { minDist = dist; nearest = chartable[i]; idx = i; }
         }
 
         if (nearest is null) return;
 
-        _crosshair.X         = nearest.ReceivedAt.DateTime.ToOADate();
+        _crosshair.X         = (double)idx;
         _crosshair.Y         = (double)nearest.VoltageMv!.Value;
         _crosshair.IsVisible = true;
 
+        double absCurrentMa = nearest.CurrentMa.HasValue ? Math.Abs((double)nearest.CurrentMa.Value) : 0;
         _lblChartTooltip.Text =
-            $"⏱ {nearest.ReceivedAt.DateTime:HH:mm:ss}  |  " +
+            $"⏱ {idx} min  |  " +
             $"V: {(nearest.VoltageMv.HasValue  ? $"{nearest.VoltageMv} mV"       : "—")}  |  " +
-            $"I: {(nearest.CurrentMa.HasValue  ? $"{nearest.CurrentMa} mA"       : "—")}  |  " +
+            $"I: {(nearest.CurrentMa.HasValue  ? $"{absCurrentMa} mA"            : "—")}  |  " +
             $"Health: {(nearest.HealthCurrent.HasValue ? $"{nearest.HealthCurrent}%" : "—")}";
         _lblChartTooltip.Visible = true;
 
@@ -828,8 +827,8 @@ internal sealed class StationDetailTab : UserControl
         // CapacityPayload (event 250 field 8) or TargetCapacityPct (events 201/20).
         _lblTargetCap.Text = !string.IsNullOrEmpty(state.TargetCapacity) ? state.TargetCapacity : "—";
 
-        // Chart: rebuild from bounded history (capped at 200 entries) so the chart
-        // remains correct when the ring buffer removes oldest entries.
+        // Chart: rebuild from bounded history so the chart remains correct when
+        // the ring buffer removes oldest entries.
         var chartable = state.History
             .Where(r => r.EventCode == 250 && r.VoltageMv.HasValue)
             .ToList();
@@ -843,24 +842,25 @@ internal sealed class StationDetailTab : UserControl
             // block before adding scatter plots so the shading renders behind the
             // data lines.
             var phaseRecords = chartable
-                .Where(r => r.ProcessCode.HasValue)
+                .Select((r, i) => (record: r, index: i))
+                .Where(x => x.record.ProcessCode.HasValue)
                 .ToList();
 
             if (phaseRecords.Count > 0)
             {
-                int currentCode    = phaseRecords[0].ProcessCode!.Value;
-                DateTimeOffset spanStart = phaseRecords[0].ReceivedAt;
+                int currentCode  = phaseRecords[0].record.ProcessCode!.Value;
+                int spanStartIdx = phaseRecords[0].index;
 
                 for (int i = 1; i <= phaseRecords.Count; i++)
                 {
                     bool isLast   = i == phaseRecords.Count;
-                    int? nextCode = isLast ? null : phaseRecords[i].ProcessCode!.Value;
+                    int? nextCode = isLast ? null : phaseRecords[i].record.ProcessCode!.Value;
 
                     if (nextCode == null || nextCode != currentCode)
                     {
-                        DateTimeOffset spanEnd = isLast
-                            ? phaseRecords[i - 1].ReceivedAt
-                            : phaseRecords[i].ReceivedAt;
+                        int spanEndIdx = isLast
+                            ? phaseRecords[i - 1].index
+                            : phaseRecords[i].index;
 
                         ScottPlot.Color? fillColor = currentCode switch
                         {
@@ -873,22 +873,22 @@ internal sealed class StationDetailTab : UserControl
                         if (fillColor.HasValue)
                         {
                             var hspan = plot.Add.HorizontalSpan(
-                                spanStart.DateTime.ToOADate(),
-                                spanEnd.DateTime.ToOADate());
+                                (double)spanStartIdx,
+                                (double)spanEndIdx);
                             hspan.FillColor = fillColor.Value;
                             hspan.LineWidth = 0;
                         }
 
                         if (nextCode != null)
                         {
-                            currentCode = nextCode.Value;
-                            spanStart   = phaseRecords[i].ReceivedAt;
+                            currentCode  = nextCode.Value;
+                            spanStartIdx = phaseRecords[i].index;
                         }
                     }
                 }
             }
 
-            var voltageXs = chartable.Select(r => r.ReceivedAt.DateTime.ToOADate()).ToArray();
+            var voltageXs = chartable.Select((_, i) => (double)i).ToArray();
             var voltageYs = chartable.Select(r => (double)r.VoltageMv!.Value).ToArray();
             var voltageScatter = plot.Add.Scatter(voltageXs, voltageYs);
             voltageScatter.LegendText = "Voltage (mV)";
@@ -899,11 +899,14 @@ internal sealed class StationDetailTab : UserControl
             // Explicitly map voltage data to the left axis
             voltageScatter.Axes.YAxis = plot.Axes.Left;
 
-            var healthPoints = chartable.Where(r => r.HealthCurrent.HasValue).ToList();
-            if (healthPoints.Count > 0)
+            var healthIndexedPoints = chartable
+                .Select((r, i) => (record: r, index: i))
+                .Where(x => x.record.HealthCurrent.HasValue)
+                .ToList();
+            if (healthIndexedPoints.Count > 0)
             {
-                var healthXs = healthPoints.Select(r => r.ReceivedAt.DateTime.ToOADate()).ToArray();
-                var healthYs = healthPoints.Select(r => (double)r.HealthCurrent!.Value).ToArray();
+                var healthXs = healthIndexedPoints.Select(x => (double)x.index).ToArray();
+                var healthYs = healthIndexedPoints.Select(x => (double)x.record.HealthCurrent!.Value).ToArray();
                 var healthScatter = plot.Add.Scatter(healthXs, healthYs);
                 healthScatter.LegendText = "Health (%)";
                 healthScatter.Color      = ScottPlot.Colors.OrangeRed;
@@ -916,11 +919,14 @@ internal sealed class StationDetailTab : UserControl
 
             // Current (mA) line on the dedicated third axis.
             double[]? currentYsForAxis = null;
-            var currentPoints = chartable.Where(r => r.CurrentMa.HasValue).ToList();
-            if (currentPoints.Count > 0 && _currentAxis is not null)
+            var currentIndexedPoints = chartable
+                .Select((r, i) => (record: r, index: i))
+                .Where(x => x.record.CurrentMa.HasValue)
+                .ToList();
+            if (currentIndexedPoints.Count > 0 && _currentAxis is not null)
             {
-                var currentXs = currentPoints.Select(r => r.ReceivedAt.DateTime.ToOADate()).ToArray();
-                currentYsForAxis = currentPoints.Select(r => (double)r.CurrentMa!.Value).ToArray();
+                var currentXs = currentIndexedPoints.Select(x => (double)x.index).ToArray();
+                currentYsForAxis = currentIndexedPoints.Select(x => Math.Abs((double)x.record.CurrentMa!.Value)).ToArray();
                 var currentScatter = plot.Add.Scatter(currentXs, currentYsForAxis);
                 currentScatter.LegendText = "Current (mA)";
                 currentScatter.Color      = ScottPlot.Colors.Orange;
@@ -971,8 +977,6 @@ internal sealed class StationDetailTab : UserControl
         _crosshair.IsVisible            = false;
         _crosshair.HorizontalLine.Color = ScottPlot.Colors.Gray.WithAlpha(0.6f);
         _crosshair.VerticalLine.Color   = ScottPlot.Colors.Gray.WithAlpha(0.6f);
-
-        plot.Axes.DateTimeTicksBottom();
 
         // WinForms hidden tabs have Width/Height of 0. Refreshing a 0x0 chart
         // corrupts ScottPlot's internal axis math. Only refresh when the control
