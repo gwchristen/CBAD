@@ -432,15 +432,54 @@ internal sealed class StationDetailTab : UserControl
 
     private void OnCommitRecord(object? sender, EventArgs e)
     {
-        MessageBox.Show(
-            $"Station {_station} record commit is not yet implemented.{Environment.NewLine}" +
-            $"Work Order: {_txtWorkOrder.Text}{Environment.NewLine}" +
-            $"Battery Serial: {_txtBatterySerial.Text}{Environment.NewLine}" +
-            $"Visual Inspection Passed: {_chkVisualPass.Checked}{Environment.NewLine}" +
-            $"Notes: {_txtNotes.Text}",
-            "Commit Record — Coming Soon",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Information);
+        if (_lastState is null || _lastState.Latest is null)
+        {
+            MessageBox.Show("No test data available to generate a report.", "Report Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var rec = _lastState.Latest;
+        
+        string chartBase64 = "";
+        try
+        {
+            // Capture the chart as a 800x400 PNG
+            byte[] bytes = _formsPlot.Plot.GetImage(800, 400).GetImageBytes();
+            chartBase64 = Convert.ToBase64String(bytes);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"Failed to generate chart image for report: {ex.Message}");
+        }
+
+        var processCodeStr = rec.ProcessCode?.ToString() ?? "";
+        string statusText = !string.IsNullOrEmpty(_lastState.FailureReason)
+            ? $"FAIL: {_lastState.FailureReason}"
+            : CadexStatusCodes.Describe(processCodeStr);
+
+        var data = new CBAD.Reporting.ReportData
+        {
+            Station = _station.ToString(),
+            WorkOrder = _txtWorkOrder.Text,
+            BatterySerial = _txtBatterySerial.Text,
+            PassedVisualInspection = _chkVisualPass.Checked,
+            Notes = _txtNotes.Text,
+            ChartImageBase64 = chartBase64,
+
+            Date = rec.ReceivedAt.ToString("yyyy-MM-dd HH:mm:ss UTC"),
+            FinalStatus = statusText,
+            ProcessCode = string.IsNullOrEmpty(processCodeStr) ? "—" : $"{processCodeStr} ({CadexStatusCodes.Describe(processCodeStr)})",
+            TargetCapacity = _lastState.TargetCapacity ?? "—",
+            FinalVoltage = rec.VoltageMv.HasValue ? $"{rec.VoltageMv} mV" : "—",
+            FinalCurrent = rec.CurrentMa.HasValue ? $"{rec.CurrentMa} mA" : "—",
+            FinalHealth = rec.HealthCurrent.HasValue ? $"{rec.HealthCurrent}%" : "—",
+            Resistance = rec.ResistanceMOhm.HasValue ? $"{rec.ResistanceMOhm} mΩ" : "—"
+        };
+
+        var html = CBAD.Reporting.ReportGenerator.GenerateHtml(data);
+        
+        using var viewer = new ReportViewerForm(html, $"Report - Station {_station}");
+        viewer.ShowDialog(this);
     }
 
     // ── Chart + Stream tabs ─────────────────────────────────────────────
