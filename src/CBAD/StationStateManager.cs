@@ -13,7 +13,7 @@ namespace CBAD;
 internal sealed class StationStateManager
 {
     /// <summary>Maximum number of parsed records kept per station.</summary>
-    public const int HistoryCapacity = 200;
+    public const int HistoryCapacity = 5000;
 
     /// <summary>Maximum number of raw lines kept per station.</summary>
     public const int RawLineCapacity = 500;
