@@ -102,7 +102,8 @@ internal sealed class DashboardServer : IAsyncDisposable
                     HealthPrevious: r?.HealthPrevious,
                     TemperatureC:   r?.TemperatureC,
                     LastUpdate:     r?.ReceivedAt,
-                    FailureReason:  state.FailureReason
+                    FailureReason:  state.FailureReason,
+                    SessionStart:   state.SessionStart
                 );
             }
             return Results.Json(summaries);
@@ -141,7 +142,8 @@ internal sealed class DashboardServer : IAsyncDisposable
         int? HealthPrevious,
         int? TemperatureC,
         DateTimeOffset? LastUpdate,
-        string? FailureReason
+        string? FailureReason,
+        DateTimeOffset? SessionStart
     );
 
     // ── Embedded HTML dashboard ──────────────────────────────────────────
@@ -401,12 +403,23 @@ internal sealed class DashboardServer : IAsyncDisposable
               </div>`;
             }
 
+            function fmtRuntime(sessionStart) {
+              if (!sessionStart) return '—';
+              const totalSec = Math.floor((Date.now() - new Date(sessionStart)) / 1000);
+              const h = Math.floor(totalSec / 3600);
+              const m = Math.floor((totalSec % 3600) / 60);
+              const s = totalSec % 60;
+              if (h > 0) return `${h}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s`;
+              return `${m}m ${String(s).padStart(2,'0')}s`;
+            }
+
             function renderCard(s) {
               const badge   = statusBadge(s.status, s.lastUpdate, s.failureReason);
               const voltage = fmtVoltage(s.voltageMv);
               const current = fmtCurrent(s.currentMa);
               const health  = fmtHealth(s.healthCurrent, s.healthPrevious);
               const temp    = fmtTemp(s.temperatureC);
+              const runtime = fmtRuntime(s.sessionStart);
 
               const lu = s.lastUpdate
                 ? new Date(s.lastUpdate).toLocaleTimeString()
@@ -429,7 +442,7 @@ internal sealed class DashboardServer : IAsyncDisposable
                   ${metricHtml('Health',   health)}
                   ${metricHtml('Temp',     temp)}
                 </div>
-                <div class="last-update">Last update: ${lu}</div>
+                <div class="last-update">Runtime: ${runtime} &nbsp;|&nbsp; Last update: ${lu}</div>
               </div>`;
             }
 

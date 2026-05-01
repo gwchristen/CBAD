@@ -301,4 +301,95 @@ public class StationStateManagerTests
         Assert.Null(mgr.GetState(1).LastFaultEventCode);
         Assert.Null(mgr.GetState(1).LastFaultRecord);
     }
+
+    [Fact]
+    public void ProcessLine_SessionStartCode_SetsSessionStart()
+    {
+        var mgr = new StationStateManager();
+        Assert.Null(mgr.GetState(1).SessionStart);
+
+        mgr.ProcessLine(@"0,1,""          "",""04/27/2026"",""150000"",20,""0\80""");
+
+        Assert.NotNull(mgr.GetState(1).SessionStart);
+    }
+
+    [Fact]
+    public void ProcessLine_FirstRecord_SetsSessionStartWhenNoSessionStartCodeSeen()
+    {
+        var mgr = new StationStateManager();
+        // A normal telemetry record (no session-start code) should still set SessionStart
+        // the first time so that mid-session captures can display a runtime.
+        mgr.ProcessLine(@"0,1,""          "",""04/24/2026"",""141900"",250,""2\3943\796\26"",""89\87""");
+
+        Assert.NotNull(mgr.GetState(1).SessionStart);
+    }
+
+    [Fact]
+    public void ProcessLine_SessionStartCode_ResetsSessionStart()
+    {
+        var mgr = new StationStateManager();
+        // Establish a SessionStart with a normal record first
+        mgr.ProcessLine(@"0,1,""          "",""04/24/2026"",""141900"",250,""2\3943\796\26"",""89\87""");
+        var firstStart = mgr.GetState(1).SessionStart;
+        Assert.NotNull(firstStart);
+
+        // A new session-start event should update SessionStart
+        System.Threading.Thread.Sleep(5);  // ensure a measurable time difference
+        mgr.ProcessLine(@"0,1,""          "",""04/27/2026"",""150000"",20,""0\80""");
+        var newStart = mgr.GetState(1).SessionStart;
+
+        Assert.NotNull(newStart);
+        // The new SessionStart should be at or after the first
+        Assert.True(newStart >= firstStart);
+    }
+
+    [Fact]
+    public void ProcessLine_Code116_AfterCode27_ThenNewDischargePhase_ClearsStickyFault()
+    {
+        // Reproduces the real-world scenario: OhmTest fault fires (ProcessCode=0,
+        // pre-test phase), then the battery is allowed to proceed and enters Discharge
+        // (ProcessCode=7).  Without the phase-transition clear the OhmTest fault
+        // stays sticky and incorrectly becomes the failure reason when 116 fires
+        // during the discharge phase.
+        var mgr = new StationStateManager();
+
+        // OhmTest with ProcessCode=0 (initial / pre-test phase), resistance 114 mΩ
+        var ohmLine       = @"0,1,""          "",""04/27/2026"",""143257"",27,""0\70"",114";
+        // Discharge phase starts (event code 7, ProcessCode=7)
+        var dischargeLine = @"0,1,""          "",""04/27/2026"",""143258"",7,""7\1419\-401\35"",""85\37""";
+        // Program fails during discharge (no code 115 before 116)
+        var failLine      = @"0,1,""          "",""04/27/2026"",""143300"",116,""7\1419\-401\35"",""85\37""";
+
+        mgr.ProcessLine(ohmLine);
+        Assert.Equal(27, mgr.GetState(1).LastFaultEventCode);
+
+        mgr.ProcessLine(dischargeLine); // Phase transition should clear the OhmTest sticky fault
+        Assert.Null(mgr.GetState(1).LastFaultEventCode);
+
+        mgr.ProcessLine(failLine);
+
+        // Failure reason should NOT blame the OhmTest from the previous phase.
+        // With no fault indicator in the discharge phase, it falls back to generic.
+        Assert.Equal("Program Failed", mgr.GetState(1).FailureReason);
+    }
+
+    [Fact]
+    public void ProcessLine_Code116_AfterCode27_ThenDischargePhase_WithCode115_SetsTargetCapacityReason()
+    {
+        // Same as above, but code 115 (Target Capacity Not Met) fires during
+        // the discharge phase, which should become the failure reason.
+        var mgr = new StationStateManager();
+
+        var ohmLine       = @"0,1,""          "",""04/27/2026"",""143257"",27,""0\70"",114";
+        var dischargeLine = @"0,1,""          "",""04/27/2026"",""143258"",7,""7\1419\-401\35"",""85\37""";
+        var capLine       = @"0,1,""          "",""04/27/2026"",""143259"",115,""7\1419\-401\35"",""85\37""";
+        var failLine      = @"0,1,""          "",""04/27/2026"",""143300"",116,""7\1419\-401\35"",""85\37""";
+
+        mgr.ProcessLine(ohmLine);
+        mgr.ProcessLine(dischargeLine); // Clears OhmTest sticky fault
+        mgr.ProcessLine(capLine);       // Sets new sticky fault: Target Capacity Not Met
+        mgr.ProcessLine(failLine);
+
+        Assert.Equal("Target Capacity Not Met", mgr.GetState(1).FailureReason);
+    }
 }
