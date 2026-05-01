@@ -64,6 +64,31 @@ internal sealed class StationStateManager
             state.LastActiveRecord     = null;
             state.LastFaultEventCode   = null;
             state.LastFaultRecord      = null;
+            state.LastFaultProcessCode = null;
+            state.SessionStart         = receivedAt;
+        }
+        else if (state.SessionStart is null)
+        {
+            // Capture started mid-session: record the first-seen timestamp as a
+            // best-effort session start so that runtime can still be displayed.
+            state.SessionStart = receivedAt;
+        }
+
+        // When the station transitions into a new major testing phase (Charge,
+        // Discharge, Reconditioning), any sticky fault from a previous phase is
+        // no longer the root cause for the new phase.  Clear it so that the
+        // failure-reason logic can correctly attribute subsequent failures to
+        // events that occur in the current phase.
+        if (!CadexEventParser.IsFailureCode(record.EventCode)
+            && !CadexEventParser.IsSessionStartCode(record.EventCode)
+            && record.ProcessCode.HasValue
+            && CadexEventParser.IsMajorPhase(record.ProcessCode.Value)
+            && state.LastFaultEventCode.HasValue
+            && record.ProcessCode.Value != state.LastFaultProcessCode)
+        {
+            state.LastFaultEventCode   = null;
+            state.LastFaultRecord      = null;
+            state.LastFaultProcessCode = null;
         }
 
         // Track the most recent non-telemetry event so that when a failure code
@@ -97,8 +122,9 @@ internal sealed class StationStateManager
                 // the final failure event (16 / 116) arrives.
                 if (CadexEventParser.DetermineFailureReason(record.EventCode, record) is not null)
                 {
-                    state.LastFaultEventCode = record.EventCode;
-                    state.LastFaultRecord    = record;
+                    state.LastFaultEventCode   = record.EventCode;
+                    state.LastFaultRecord      = record;
+                    state.LastFaultProcessCode = record.ProcessCode;
                 }
             }
         }

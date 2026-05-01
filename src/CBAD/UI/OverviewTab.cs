@@ -60,6 +60,7 @@ internal sealed class OverviewTab : UserControl
         private readonly Label _current;
         private readonly Label _temp;
         private readonly Label _health;
+        private readonly Label _runtime;
         private readonly Label _lastUpdate;
         private readonly Label _emptyState;
         private bool _isDark;
@@ -119,7 +120,14 @@ internal sealed class OverviewTab : UserControl
                 AutoSize = true,
                 ForeColor = System.Drawing.Color.Gray,
                 Font = new System.Drawing.Font(Font.FontFamily, 8f),
-                Margin = new Padding(0, 8, 0, 0),
+                Margin = new Padding(0, 4, 0, 0),
+            };
+            _runtime = new Label
+            {
+                AutoSize = true,
+                ForeColor = System.Drawing.Color.Gray,
+                Font = new System.Drawing.Font(Font.FontFamily, 8f),
+                Margin = new Padding(0, 0, 0, 4),
             };
 
             var metricsGrid = new TableLayoutPanel
@@ -157,6 +165,7 @@ internal sealed class OverviewTab : UserControl
             layout.Controls.Add(_header);
             layout.Controls.Add(statusRow);
             layout.Controls.Add(metricsGrid);
+            layout.Controls.Add(_runtime);
             layout.Controls.Add(_lastUpdate);
             layout.Controls.Add(_emptyState);
 
@@ -218,6 +227,7 @@ internal sealed class OverviewTab : UserControl
             _current.Text    = "Current:   —";
             _temp.Text       = "Temp:      —";
             _health.Text     = "Health:    —";
+            _runtime.Text    = string.Empty;
             _lastUpdate.Text = string.Empty;
             _emptyState.Visible = true;
         }
@@ -241,6 +251,11 @@ internal sealed class OverviewTab : UserControl
             _current.Text = rec.CurrentMa.HasValue     ? $"Current: {rec.CurrentMa} mA"    : "Current: —";
             _temp.Text    = rec.TemperatureC.HasValue  ? $"Temp: {rec.TemperatureC} °C"    : "Temp: —";
             _health.Text  = rec.HealthCurrent.HasValue ? $"Health: {rec.HealthCurrent}%"   : "Health: —";
+
+            _runtime.Text = state.SessionStart.HasValue
+                ? $"Runtime: {FormatRuntime(DateTimeOffset.UtcNow - state.SessionStart.Value)}"
+                : string.Empty;
+
             _lastUpdate.Text = $"Updated {rec.ReceivedAt:HH:mm:ss} UTC";
         }
 
@@ -254,8 +269,16 @@ internal sealed class OverviewTab : UserControl
             _current.ForeColor    = AppTheme.LabelFg(isDark);
             _temp.ForeColor       = AppTheme.LabelFg(isDark);
             _health.ForeColor     = AppTheme.LabelFg(isDark);
+            _runtime.ForeColor    = AppTheme.MutedFg(isDark);
             _lastUpdate.ForeColor = AppTheme.MutedFg(isDark);
             _emptyState.ForeColor = AppTheme.MutedFg(isDark);
+        }
+
+        private static string FormatRuntime(TimeSpan elapsed)
+        {
+            if (elapsed.TotalHours >= 1)
+                return $"{(int)elapsed.TotalHours}h {elapsed.Minutes:D2}m {elapsed.Seconds:D2}s";
+            return $"{elapsed.Minutes}m {elapsed.Seconds:D2}s";
         }
     }
 }

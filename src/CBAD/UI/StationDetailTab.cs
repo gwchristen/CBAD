@@ -22,6 +22,7 @@ internal sealed class StationDetailTab : UserControl
     private readonly Label _lblHealth      = new() { AutoSize = true };
     private readonly Label _lblTemp        = new() { AutoSize = true };
     private readonly Label _lblLastUpdate  = new() { AutoSize = true };
+    private readonly Label _lblRuntime     = new() { AutoSize = true };
 
     // ── Advanced detail labels ──────────────────────────────────────────
     private readonly Label _lblStation       = new() { AutoSize = true };
@@ -197,10 +198,14 @@ internal sealed class StationDetailTab : UserControl
         metricsFlow.Controls.Add(MakeMetricCell(_lblHealthIcon,  _lblHealth));
         metricsFlow.Controls.Add(MakeMetricCell(_lblTempIcon,    _lblTemp));
 
-        // Last update
+        // Last update and runtime
         _lblLastUpdate.ForeColor = System.Drawing.Color.Gray;
         _lblLastUpdate.Font = new System.Drawing.Font(Font.FontFamily, 8.5f);
         _lblLastUpdate.Text = "No data yet — connect and start capture";
+
+        _lblRuntime.ForeColor = System.Drawing.Color.Gray;
+        _lblRuntime.Font = new System.Drawing.Font(Font.FontFamily, 8.5f);
+        _lblRuntime.Text = string.Empty;
 
         // Additional details GroupBox
         var advGroup = BuildAdvancedGroup();
@@ -220,6 +225,7 @@ internal sealed class StationDetailTab : UserControl
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // battery id
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // status row
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // metrics
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // runtime
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));  // last update
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 180f));  // adv group
 
@@ -227,8 +233,9 @@ internal sealed class StationDetailTab : UserControl
         layout.Controls.Add(_lblBatteryId,   0, 1);
         layout.Controls.Add(statusRow,       0, 2);
         layout.Controls.Add(metricsFlow,     0, 3);
-        layout.Controls.Add(_lblLastUpdate,  0, 4);
-        layout.Controls.Add(advGroup,        0, 5);
+        layout.Controls.Add(_lblRuntime,     0, 4);
+        layout.Controls.Add(_lblLastUpdate,  0, 5);
+        layout.Controls.Add(advGroup,        0, 6);
 
         panel.Controls.Add(layout);
         return panel;
@@ -264,6 +271,13 @@ internal sealed class StationDetailTab : UserControl
         fp.Controls.Add(icon);
         fp.Controls.Add(text);
         return fp;
+    }
+
+    private static string FormatRuntime(TimeSpan elapsed)
+    {
+        if (elapsed.TotalHours >= 1)
+            return $"{(int)elapsed.TotalHours}h {elapsed.Minutes:D2}m {elapsed.Seconds:D2}s";
+        return $"{elapsed.Minutes}m {elapsed.Seconds:D2}s";
     }
 
     private GroupBox BuildAdvancedGroup()
@@ -802,6 +816,11 @@ internal sealed class StationDetailTab : UserControl
             _lblCurrent.Text = rec.CurrentMa.HasValue    ? $"Current: {rec.CurrentMa} mA"    : "Current: —";
             _lblHealth.Text  = rec.HealthCurrent.HasValue  ? $"Health: {rec.HealthCurrent}%"  : "Health: —";
             _lblTemp.Text    = rec.TemperatureC.HasValue ? $"Temp: {rec.TemperatureC} °C"    : "Temp: —";
+
+            _lblRuntime.Text = state.SessionStart.HasValue
+                ? $"Runtime: {FormatRuntime(DateTimeOffset.UtcNow - state.SessionStart.Value)}"
+                : string.Empty;
+
             _lblLastUpdate.Text = $"Last update: {rec.ReceivedAt:HH:mm:ss} UTC";
 
             // Advanced section
@@ -1010,6 +1029,7 @@ internal sealed class StationDetailTab : UserControl
         _lblHealth.ForeColor     = AppTheme.LabelFg(isDark);
         _lblTemp.ForeColor       = AppTheme.LabelFg(isDark);
         _lblLastUpdate.ForeColor = AppTheme.MutedFg(isDark);
+        _lblRuntime.ForeColor    = AppTheme.MutedFg(isDark);
 
         // Advanced detail value labels
         _lblStation.ForeColor       = AppTheme.LabelFg(isDark);

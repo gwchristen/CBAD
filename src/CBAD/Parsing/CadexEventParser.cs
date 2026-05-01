@@ -217,4 +217,14 @@ internal static class CadexEventParser
     /// </summary>
     public static bool IsSessionStartCode(int eventCode) =>
         eventCode is 11 or 20 or 201 or 200;
+
+    /// <summary>
+    /// Returns <c>true</c> for <see cref="CadexRecord.ProcessCode"/> values that
+    /// represent a major testing phase (Charge, Reconditioning, or Discharge).
+    /// Transitioning into a new major phase means the station has moved on to a
+    /// fresh measurement cycle, so any sticky fault from a previous phase should
+    /// be cleared.
+    /// </summary>
+    public static bool IsMajorPhase(int processCode) =>
+        processCode is 2 or 4 or 7;  // Charging, Reconditioning, Discharging
 }
