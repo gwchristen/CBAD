@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.IO.Ports;
+using CBAD.Models;
 using CBAD.Simulation;
 using CBAD.UI;
 using CBAD.WebServer;
@@ -57,6 +58,9 @@ internal class MainForm : Form
 
     // Station state manager — holds ring-buffer history; owns parse + update logic.
     private readonly StationStateManager _stateManager = new();
+
+    // Battery profile manager — persists C-code test parameter profiles.
+    private readonly ProfileManager _profileManager = new();
 
     // Embedded web dashboard server for remote monitoring.
     private readonly DashboardServer _dashboardServer;
@@ -162,7 +166,14 @@ internal class MainForm : Form
         connectionsMenu.Click += (_, __) => OpenConnectionSettings();
 
         var settingsMenu = new ToolStripMenuItem("Settings");
-        settingsMenu.Click += (_, __) => new SettingsForm().ShowDialog(this);
+
+        var profilesItem = new ToolStripMenuItem("Battery Profiles…");
+        profilesItem.Click += (_, __) => new ProfileManagerForm(_profileManager).ShowDialog(this);
+        settingsMenu.DropDownItems.Add(profilesItem);
+
+        var generalItem = new ToolStripMenuItem("General Settings…");
+        generalItem.Click += (_, __) => new SettingsForm().ShowDialog(this);
+        settingsMenu.DropDownItems.Add(generalItem);
 
         var recordsMenu = new ToolStripMenuItem("Records");
         recordsMenu.Click += (_, __) =>
