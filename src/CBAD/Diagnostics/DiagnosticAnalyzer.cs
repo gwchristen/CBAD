@@ -15,6 +15,24 @@ namespace CBAD.Diagnostics;
 /// </remarks>
 internal sealed class DiagnosticAnalyzer
 {
+    // ── IR thresholds (mΩ per cell) ───────────────────────────────────────
+    // Based on healthy SLA 2 V cell limits: ≤ 15 mΩ/cell is normal.
+    private const double IrNormalMOhmPerCell   = 15.0;
+    private const double IrElevatedMOhmPerCell = 30.0;
+    private const double IrSevereMOhmPerCell   = 50.0;
+
+    // ── Voltage-sag thresholds (mV per cell, during discharge) ────────────
+    private const double VsagNormalMvPerCell   = 100;
+    private const double VsagElevatedMvPerCell = 200;
+    private const double VsagSevereMvPerCell   = 350;
+
+    // ── Temperature-deviation thresholds (°C above or below safe range) ──
+    private const double TempDeviationElevatedC = 5;
+    private const double TempDeviationSevereC   = 15;
+
+    // ── Default cell count when pack voltage is unknown ───────────────────
+    private const double DefaultCellCount = 6;
+
     /// <summary>
     /// Runs a full diagnostic analysis and returns a <see cref="DiagnosticReport"/>
     /// containing the Stage 3 classification and a Stage 4 technician explanation.
@@ -65,9 +83,9 @@ internal sealed class DiagnosticAnalyzer
         if (latest?.ResistanceMOhm is int irMOhm)
         {
             double nominalCells         = EstimateCellCount(profile.Volts);
-            double healthyPackIrMOhm    = nominalCells * 15.0;   // ≤ 15 mΩ / cell → healthy
-            double elevatedPackIrMOhm   = nominalCells * 30.0;
-            double severePackIrMOhm     = nominalCells * 50.0;
+            double healthyPackIrMOhm    = nominalCells * IrNormalMOhmPerCell;
+            double elevatedPackIrMOhm   = nominalCells * IrElevatedMOhmPerCell;
+            double severePackIrMOhm     = nominalCells * IrSevereMOhmPerCell;
 
             c.IRSeverity = irMOhm switch
             {
@@ -97,10 +115,10 @@ internal sealed class DiagnosticAnalyzer
 
             c.VoltageCollapseSeverity = sagPerCellMv switch
             {
-                <= 100 => Severity.Normal,
-                <= 200 => Severity.Elevated,
-                <= 350 => Severity.Severe,
-                _      => Severity.Critical,
+                <= VsagNormalMvPerCell   => Severity.Normal,
+                <= VsagElevatedMvPerCell => Severity.Elevated,
+                <= VsagSevereMvPerCell   => Severity.Severe,
+                _                        => Severity.Critical,
             };
         }
 
@@ -123,10 +141,10 @@ internal sealed class DiagnosticAnalyzer
 
             c.ThermalAbnormalitySeverity = deviation switch
             {
-                <= 0  => Severity.Normal,
-                <= 5  => Severity.Elevated,
-                <= 15 => Severity.Severe,
-                _     => Severity.Critical,
+                <= 0                        => Severity.Normal,
+                <= TempDeviationElevatedC   => Severity.Elevated,
+                <= TempDeviationSevereC     => Severity.Severe,
+                _                           => Severity.Critical,
             };
         }
 
@@ -249,5 +267,6 @@ internal sealed class DiagnosticAnalyzer
     /// Returns at least 1 so division is always safe.
     /// </summary>
     private static double EstimateCellCount(double packVoltage)
-        => packVoltage > 0 ? Math.Max(1, Math.Round(packVoltage / 2.0)) : 6;
+        => packVoltage > 0 ? Math.Max(1, Math.Round(packVoltage / 2.0)) : DefaultCellCount;
 }
+
