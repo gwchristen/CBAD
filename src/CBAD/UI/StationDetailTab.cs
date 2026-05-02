@@ -1,3 +1,4 @@
+using CBAD.Diagnostics;
 using CBAD.Models;
 using CBAD.Parsing;
 using ScottPlot.WinForms;
@@ -7,6 +8,10 @@ namespace CBAD.UI;
 internal sealed class StationDetailTab : UserControl
 {
     private readonly int _station;
+
+    // ── Diagnostic inference ──────────────────────────────────────────────
+    private readonly DiagnosticAnalyzer _diagnosticAnalyzer = new();
+    private ProfileManager? _profileManager;
 
     // ── Essentials section labels ───────────────────────────────────────
     private readonly Label _lblStationBig  = new() { AutoSize = true };
@@ -45,6 +50,20 @@ internal sealed class StationDetailTab : UserControl
     private GroupBox? _recordMetaGroup;
     private TableLayoutPanel? _recordMetaTable;
 
+    // ── Diagnostic Explanation ────────────────────────────────────────────
+    private readonly TextBox _txtDiagExplanation = new()
+    {
+        Multiline   = true,
+        ReadOnly    = true,
+        Height      = 120,
+        ScrollBars  = ScrollBars.Vertical,
+        BackColor   = System.Drawing.Color.FromArgb(240, 244, 250),
+        ForeColor   = System.Drawing.Color.FromArgb(30, 46, 78),
+        Font        = new System.Drawing.Font("Segoe UI", 8.5f),
+        Text        = "No diagnostic data — run a test with an active profile.",
+    };
+    private GroupBox? _diagGroup;
+
     // Theming support
     private Panel? _essentialsPanel;
     private GroupBox? _advGroup;
@@ -82,9 +101,10 @@ internal sealed class StationDetailTab : UserControl
 
     private StationState? _lastState;
 
-    public StationDetailTab(int station)
+    public StationDetailTab(int station, ProfileManager? profileManager = null)
     {
-        _station = station;
+        _station        = station;
+        _profileManager = profileManager;
         Dock = DockStyle.Fill;
 
         _txtStream = new TextBox
@@ -119,7 +139,20 @@ internal sealed class StationDetailTab : UserControl
         mainCol.Controls.Add(BuildEssentialsPanel(), 0, 0);
         mainCol.Controls.Add(BuildChartStreamTabs(), 0, 1);
 
-        // ── Outer layout: main area (left, fill) | record metadata (right, fixed 230px) ──────
+        // ── Right column: diagnostic explanation (top) | record metadata (fill) ───────────
+        var rightCol = new TableLayoutPanel
+        {
+            Dock        = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount    = 2,
+        };
+        rightCol.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        rightCol.RowStyles.Add(new RowStyle(SizeType.AutoSize));       // diagnostic: auto-height
+        rightCol.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));  // metadata: fills rest
+        rightCol.Controls.Add(BuildDiagnosticGroup(), 0, 0);
+        rightCol.Controls.Add(BuildRecordMetadataGroup(), 0, 1);
+
+        // ── Outer layout: main area (left, fill) | right column (fixed 260px) ─────────────
         var outer = new TableLayoutPanel
         {
             Dock        = DockStyle.Fill,
@@ -127,10 +160,10 @@ internal sealed class StationDetailTab : UserControl
             RowCount    = 1,
         };
         outer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));   // main: fills rest
-        outer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 230f));  // metadata: fixed
+        outer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 260f));  // right: fixed
         outer.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-        outer.Controls.Add(mainCol, 0, 0);
-        outer.Controls.Add(BuildRecordMetadataGroup(), 1, 0);
+        outer.Controls.Add(mainCol,   0, 0);
+        outer.Controls.Add(rightCol,  1, 0);
 
         Controls.Add(outer);
     }
@@ -420,6 +453,55 @@ internal sealed class StationDetailTab : UserControl
         return group;
     }
 
+    // ── Diagnostic Explanation group ──────────────────────────────────────
+    private GroupBox BuildDiagnosticGroup()
+    {
+        var group = new GroupBox
+        {
+            Text    = "🔬 Diagnostic Explanation",
+            Dock    = DockStyle.Top,
+            Padding = new Padding(8, 20, 8, 8),
+            Margin  = new Padding(0, 0, 0, 4),
+            AutoSize     = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        };
+
+        _txtDiagExplanation.Dock   = DockStyle.Top;
+        _txtDiagExplanation.Margin = new Padding(0);
+
+        group.Controls.Add(_txtDiagExplanation);
+
+        _diagGroup = group;
+
+        group.Paint += OnDiagGroupPaint;
+
+        return group;
+    }
+
+    private void OnDiagGroupPaint(object? sender, PaintEventArgs e)
+    {
+        if (!_isDark) return;
+
+        var gb = (GroupBox)sender!;
+        var g  = e.Graphics;
+
+        var textSize  = g.MeasureString(gb.Text, gb.Font);
+        int borderTop = (int)(textSize.Height / 2);
+
+        using var bgBrush = new System.Drawing.SolidBrush(gb.BackColor);
+        g.FillRectangle(bgBrush, 0, borderTop, gb.Width, gb.Height - borderTop);
+        g.FillRectangle(bgBrush, 0, 0, gb.Width, borderTop);
+
+        using var pen = new System.Drawing.Pen(AppTheme.BorderColor(true));
+        g.DrawRectangle(pen, new System.Drawing.Rectangle(0, borderTop, gb.Width - 1, gb.Height - borderTop - 1));
+
+        const float textX = 9f;
+        using var textBgBrush = new System.Drawing.SolidBrush(gb.BackColor);
+        g.FillRectangle(textBgBrush, textX - 2, 0, textSize.Width + 4, textSize.Height);
+        using var textBrush = new System.Drawing.SolidBrush(gb.ForeColor);
+        g.DrawString(gb.Text, gb.Font, textBrush, textX, 0);
+    }
+
     private void OnRecordMetaGroupPaint(object? sender, PaintEventArgs e)
     {
         if (!_isDark) return;
@@ -642,6 +724,10 @@ internal sealed class StationDetailTab : UserControl
             _lblHealthPrev.Text     = "—";
             _lblTargetCap.Text      = "—";
             _lblResistance.Text     = "—";
+
+            // Diagnostic explanation
+            _txtDiagExplanation.Text      = "No diagnostic data — run a test with an active profile.";
+            _txtDiagExplanation.ForeColor = AppTheme.MutedFg(_isDark);
         };
     }
 
@@ -1008,6 +1094,51 @@ internal sealed class StationDetailTab : UserControl
         // Stream: update display only when not paused.
         if (!_streamPaused)
             RefreshStream();
+
+        // ── Diagnostic analysis ───────────────────────────────────────────
+        RunDiagnosticAnalysis(state);
+    }
+
+    /// <summary>
+    /// Runs the Stage 3/4 diagnostic inference against the active profile (if any)
+    /// and updates the Diagnostic Explanation TextBox with the result.
+    /// </summary>
+    private void RunDiagnosticAnalysis(StationState state)
+    {
+        var profile = _profileManager?.ActiveProfile;
+        if (profile is null)
+        {
+            _txtDiagExplanation.Text      = "No active battery profile — select a profile in Settings › Battery Profiles to enable diagnostics.";
+            _txtDiagExplanation.ForeColor = AppTheme.MutedFg(_isDark);
+            return;
+        }
+
+        if (state.Latest is null)
+        {
+            _txtDiagExplanation.Text      = "No diagnostic data — run a test with an active profile.";
+            _txtDiagExplanation.ForeColor = AppTheme.MutedFg(_isDark);
+            return;
+        }
+
+        try
+        {
+            var report = _diagnosticAnalyzer.Analyze(state, profile);
+
+            _txtDiagExplanation.Text = report.TechnicianExplanation;
+
+            // Colour-code the explanation: green for pass, red/amber for fail.
+            _txtDiagExplanation.ForeColor = report.IsPass
+                ? System.Drawing.Color.FromArgb(0, 130, 60)
+                : (report.TechnicianExplanation.StartsWith("CAUTION", StringComparison.OrdinalIgnoreCase)
+                    ? System.Drawing.Color.FromArgb(180, 100, 0)
+                    : System.Drawing.Color.FromArgb(180, 30, 30));
+        }
+        catch (Exception ex)
+        {
+            _txtDiagExplanation.Text      = $"Diagnostic analysis error: {ex.Message}";
+            _txtDiagExplanation.ForeColor = AppTheme.MutedFg(_isDark);
+            AppLog.Warn($"DiagnosticAnalyzer error on station {_station}: {ex.Message}");
+        }
     }
 
     // ── Theming ─────────────────────────────────────────────────────────
@@ -1103,5 +1234,17 @@ internal sealed class StationDetailTab : UserControl
                 }
             }
         }
+
+        // Diagnostic explanation group
+        if (_diagGroup != null)
+        {
+            _diagGroup.ForeColor = AppTheme.LabelFg(isDark);
+            _diagGroup.BackColor = AppTheme.PanelBg(isDark);
+            _diagGroup.Invalidate();
+        }
+
+        _txtDiagExplanation.BackColor = isDark
+            ? System.Drawing.Color.FromArgb(22, 32, 52)
+            : System.Drawing.Color.FromArgb(240, 244, 250);
     }
 }

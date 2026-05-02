@@ -147,7 +147,7 @@ internal class MainForm : Form
         _detailTabs = new StationDetailTab[4];
         for (int i = 0; i < 4; i++)
         {
-            _detailTabs[i] = new StationDetailTab(i + 1);
+            _detailTabs[i] = new StationDetailTab(i + 1, _profileManager);
             var tp = new TabPage($"Station {i + 1}");
             tp.Controls.Add(_detailTabs[i]);
             tabs.TabPages.Add(tp);
