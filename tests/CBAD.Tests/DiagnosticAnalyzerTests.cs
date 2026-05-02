@@ -25,6 +25,9 @@ public class DiagnosticAnalyzerTests
             MaxChargeVoltagePerCell        = 2.45,
             EndOfChargeC                   = 0.05,
             EndOfDischargeVoltagePerCell   = 1.75,
+            CellsInSeries                  = (int)Math.Round(volts / 2.0),
+            StringsInParallel              = 2,
+            NominalCellVoltage             = 2.0,
         };
 
     /// <summary>Builds a <see cref="StationState"/> with a specified health %.</summary>
@@ -236,5 +239,152 @@ public class DiagnosticAnalyzerTests
         var report = analyzer.Analyze(state, profile);
 
         Assert.True(report.Classification.ParallelImbalanceProbable);
+    }
+
+    // ── Tests: new granular enums and derived metrics ─────────────────────
+
+    [Fact]
+    public void Analyze_CatastrophicCellIR_ProducesCatastrophicIRClassification()
+    {
+        // 3S2P pack: topology divisor = 3/2 = 1.5
+        // Pack IR = 150 mΩ → cell IR = 150 / 1.5 = 100 mΩ → Catastrophic (> 80)
+        var analyzer = new DiagnosticAnalyzer();
+        var state = new StationState
+        {
+            Station = 1,
+            Latest = new CadexRecord { HealthCurrent = 29, ResistanceMOhm = 150, EventCode = 250, Station = 1 },
+        };
+        var profile = MakeProfile(targetCapPct: 70.0, volts: 6.0); // CellsInSeries=3, StringsInParallel=2
+
+        var report = analyzer.Analyze(state, profile);
+
+        Assert.Equal(IRStatus.Catastrophic, report.Classification.IRClassification);
+        Assert.StartsWith("FAIL – Internal resistance collapse", report.TechnicianExplanation, StringComparison.Ordinal);
+        Assert.Contains("3S2P", report.TechnicianExplanation, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Analyze_CatastrophicCellIR_ExplanationContainsNominalCellVoltage()
+    {
+        // Ensure the rule output includes the NominalCellVoltage from the profile.
+        var analyzer = new DiagnosticAnalyzer();
+        var state = new StationState
+        {
+            Station = 1,
+            Latest = new CadexRecord { HealthCurrent = 29, ResistanceMOhm = 150, EventCode = 250, Station = 1 },
+        };
+        var profile = MakeProfile(targetCapPct: 70.0, volts: 6.0);
+
+        var report = analyzer.Analyze(state, profile);
+
+        Assert.Contains("2V cell", report.TechnicianExplanation, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Analyze_CalculatedCellIR_UsesTopologyDivisor()
+    {
+        // 3S2P: divisor = 1.5 → pack IR 90 mΩ → cell IR = 60 mΩ → Fail (> 40, ≤ 80)
+        var analyzer = new DiagnosticAnalyzer();
+        var state = new StationState
+        {
+            Station = 1,
+            Latest = new CadexRecord { HealthCurrent = 80, ResistanceMOhm = 90, EventCode = 250, Station = 1 },
+        };
+        var profile = MakeProfile(targetCapPct: 70.0, volts: 6.0);
+
+        var report = analyzer.Analyze(state, profile);
+
+        Assert.Equal(60.0, report.Classification.CalculatedCellIR, precision: 1);
+        Assert.Equal(IRStatus.Fail, report.Classification.IRClassification);
+    }
+
+    [Fact]
+    public void Analyze_CapacityRatio_IsNormalisedTo0To1()
+    {
+        var analyzer = new DiagnosticAnalyzer();
+        var state    = MakeStateWithHealth(75);
+        var profile  = MakeProfile(targetCapPct: 70.0);
+
+        var report = analyzer.Analyze(state, profile);
+
+        Assert.Equal(0.75, report.Classification.CapacityRatio, precision: 2);
+        Assert.Equal(CapacityStatus.Pass, report.Classification.CapacityClassification);
+    }
+
+    [Fact]
+    public void Analyze_CapacityRatio_MarginalBand()
+    {
+        // 60% health → 0.60 ratio → Marginal (0.50–0.69)
+        var analyzer = new DiagnosticAnalyzer();
+        var state    = MakeStateWithHealth(60);
+        var profile  = MakeProfile(targetCapPct: 70.0);
+
+        var report = analyzer.Analyze(state, profile);
+
+        Assert.Equal(0.60, report.Classification.CapacityRatio, precision: 2);
+        Assert.Equal(CapacityStatus.Marginal, report.Classification.CapacityClassification);
+    }
+
+    [Fact]
+    public void Analyze_SagPerCell_OhmicCollapseClassification()
+    {
+        // 3S pack: sag = 6200 - 3800 = 2400 mV → per cell = 2400/3/1000 = 0.8 V → OhmicCollapse (> 0.3V)
+        var analyzer = new DiagnosticAnalyzer();
+        var state    = MakeStateWithDischargeSag(
+            healthPct:     29,
+            peakMv:        6200,
+            nadirMv:       3800,
+            resistanceMOhm: 150);
+        var profile = MakeProfile(targetCapPct: 70.0, volts: 6.0);
+
+        var report = analyzer.Analyze(state, profile);
+
+        Assert.Equal(SagStatus.OhmicCollapse, report.Classification.SagClassification);
+    }
+
+    [Fact]
+    public void Analyze_ParallelImbalanceConfirmed_WhenIRFailAndSagOhmicCollapse()
+    {
+        // IR = 150 mΩ → cell IR = 100 mΩ → Catastrophic (>= Fail)
+        // Sag = 2400 mV / 3 / 1000 = 0.8 V → OhmicCollapse
+        var analyzer = new DiagnosticAnalyzer();
+        var state    = MakeStateWithDischargeSag(
+            healthPct:     29,
+            peakMv:        6200,
+            nadirMv:       3800,
+            resistanceMOhm: 150);
+        var profile = MakeProfile(targetCapPct: 70.0, volts: 6.0);
+
+        var report = analyzer.Analyze(state, profile);
+
+        Assert.True(report.Classification.ParallelImbalanceConfirmed);
+    }
+
+    [Fact]
+    public void Analyze_ParallelImbalanceLikely_WhenIRPoorAndCapacityFail()
+    {
+        // 3S2P: pack IR 75 mΩ → cell IR = 75/1.5 = 50 mΩ → Fail (>40, ≤80)
+        // Capacity = 29% → Fail (< 0.50)
+        var analyzer = new DiagnosticAnalyzer();
+        var state = new StationState
+        {
+            Station = 1,
+            Latest = new CadexRecord { HealthCurrent = 29, ResistanceMOhm = 75, EventCode = 250, Station = 1 },
+        };
+        var profile = MakeProfile(targetCapPct: 70.0, volts: 6.0);
+
+        var report = analyzer.Analyze(state, profile);
+
+        Assert.True(report.Classification.ParallelImbalanceLikely);
+    }
+
+    [Fact]
+    public void BatteryProfile_DefaultTopologyValues_AreCorrect()
+    {
+        var profile = new BatteryProfile();
+
+        Assert.Equal(3, profile.CellsInSeries);
+        Assert.Equal(2, profile.StringsInParallel);
+        Assert.Equal(2.0, profile.NominalCellVoltage);
     }
 }
