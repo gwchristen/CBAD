@@ -50,4 +50,24 @@ public sealed class BatteryProfile
 
     /// <summary>Minimum accepted voltage per cell at the end of discharge.</summary>
     public double EndOfDischargeVoltagePerCell { get; set; }
+
+    // ── Physical topology ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Number of cells connected in series (e.g. 3 for a 6 V SLA pack).
+    /// Used to normalise pack-level IR and voltage-sag readings to per-cell values.
+    /// </summary>
+    public int CellsInSeries { get; set; } = 3;
+
+    /// <summary>
+    /// Number of parallel cell strings in the pack (e.g. 2 for a 3S2P topology).
+    /// Used together with <see cref="CellsInSeries"/> to derive effective pack resistance.
+    /// </summary>
+    public int StringsInParallel { get; set; } = 2;
+
+    /// <summary>
+    /// Nominal voltage of a single cell in volts (e.g. 2.0 V for SLA chemistry).
+    /// Used for labelling and to validate the <see cref="CellsInSeries"/> value.
+    /// </summary>
+    public double NominalCellVoltage { get; set; } = 2.0;
 }
