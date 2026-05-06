@@ -17,6 +17,11 @@ internal sealed class DiagnosticReport
 
     /// <summary>
     /// <c>true</c> when all diagnostic criteria are within acceptable limits.
+    /// A battery displaying only a "CAUTION – Aging" result (elevated IR, serviceable
+    /// capacity) still returns <c>false</c> here because it does not strictly meet every
+    /// acceptance criterion, even though it remains in service.  This naming makes the
+    /// semantic distinction explicit: passing all criteria is a stricter bar than merely
+    /// being serviceable.
     /// </summary>
-    public bool IsPass { get; init; }
+    public bool MeetsAcceptanceCriteria { get; init; }
 }

@@ -67,4 +67,16 @@ internal sealed class StationState
     /// session starts.
     /// </summary>
     public string? FailureReason { get; set; }
+
+    /// <summary>
+    /// <c>true</c> when the test reached its natural end-of-sequence event
+    /// (e.g. event code 13 "Test Complete") without an early abort.
+    /// Defaults to <c>true</c> so that diagnostic rules behave correctly when
+    /// this flag has not been explicitly set (e.g. in unit tests that construct
+    /// state directly).  Set to <c>false</c> when a session is known to have
+    /// terminated abnormally — the Stage 4 analyzer will then skip
+    /// capacity- and sag-based explanations that require a full test run to be
+    /// meaningful.
+    /// </summary>
+    public bool TestCompletedNormally { get; set; } = true;
 }

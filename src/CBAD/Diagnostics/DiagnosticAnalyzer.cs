@@ -57,16 +57,16 @@ internal sealed class DiagnosticAnalyzer
         var classification = ClassifyData(state, profile);
         var explanation    = EvaluateRules(classification, state, profile);
 
-        bool isPass = !classification.CapacityFail
+        bool meetsAcceptanceCriteria = !classification.CapacityFail
                       && classification.IRSeverity                 <= Severity.Normal
                       && classification.VoltageCollapseSeverity    <= Severity.Normal
                       && classification.ThermalAbnormalitySeverity <= Severity.Normal;
 
         return new DiagnosticReport
         {
-            Classification        = classification,
-            TechnicianExplanation = explanation,
-            IsPass                = isPass,
+            Classification            = classification,
+            TechnicianExplanation     = explanation,
+            MeetsAcceptanceCriteria   = meetsAcceptanceCriteria,
         };
     }
 
@@ -230,6 +230,12 @@ internal sealed class DiagnosticAnalyzer
         StationState state,
         BatteryProfile profile)
     {
+        // Determine whether topology is explicitly defined in the profile.
+        // When true, granular per-cell enums (IRClassification, SagClassification)
+        // are topology-aware and should be preferred over legacy Severity fields.
+        // When false (topology unknown), fall back to the legacy Severity path.
+        bool hasTopology = profile.CellsInSeries > 0 && profile.StringsInParallel > 0;
+
         // ── All-pass ──────────────────────────────────────────────────────
         if (!flags.CapacityFail
             && flags.IRSeverity                 <= Severity.Normal
@@ -278,28 +284,62 @@ internal sealed class DiagnosticAnalyzer
         }
 
         // ── Rule 3: Sulfation / plate degradation ─────────────────────────
-        // High IR (Elevated or above) + failed capacity
-        if (flags.IRSeverity >= Severity.Elevated && flags.CapacityFail)
+        // High IR (Elevated or above) + failed capacity.
+        // Gated on TestCompletedNormally: if the test aborted early, capacity data
+        // may be incomplete and we cannot confidently attribute the failure to
+        // sulfation based on incomplete discharge data alone.
+        // Prefer granular IRClassification (>= Poor) when topology is known;
+        // fall back to legacy IRSeverity when topology is unknown.
+        bool irElevatedForRule3 = hasTopology
+            ? flags.IRClassification >= IRStatus.Poor
+            : flags.IRSeverity >= Severity.Elevated;
+
+        if (state.TestCompletedNormally && irElevatedForRule3 && flags.CapacityFail)
         {
+            string irDetail = hasTopology
+                ? $" ({flags.IRClassification} IR at {flags.CalculatedCellIR:F0} mΩ/cell)"
+                : string.Empty;
+
             return "FAIL – Sulfation / plate degradation suspected. " +
-                   "Elevated internal resistance combined with reduced capacity indicates lead-sulfate crystal build-up " +
+                   $"Elevated internal resistance{irDetail} combined with reduced capacity indicates lead-sulfate crystal build-up " +
                    "on the active plate material, a common end-of-life failure mode in SLA batteries. " +
                    "Reconditioning cycles are unlikely to restore full capacity at this stage.";
         }
 
         // ── Rule 4: Aging but serviceable ────────────────────────────────
-        // Good capacity + bad IR (Elevated or Severe)
-        if (!flags.CapacityFail && flags.IRSeverity >= Severity.Elevated)
+        // Good capacity + bad IR (Elevated or Severe).
+        // Prefer granular IRClassification when topology is known.
+        // Note: MeetsAcceptanceCriteria remains false — a battery is serviceable
+        // under this rule but does not strictly meet all acceptance criteria.
+        bool irElevatedForRule4 = hasTopology
+            ? flags.IRClassification >= IRStatus.Poor
+            : flags.IRSeverity >= Severity.Elevated;
+
+        if (!flags.CapacityFail && irElevatedForRule4)
         {
+            string irDetail = hasTopology
+                ? $" ({flags.IRClassification} IR at {flags.CalculatedCellIR:F0} mΩ/cell)"
+                : string.Empty;
+
             return "CAUTION – Aging detected, currently serviceable. " +
-                   "Capacity is still within the acceptance threshold; however, internal resistance is elevated, " +
+                   $"Capacity is still within the acceptance threshold; however, internal resistance is elevated{irDetail}, " +
                    "which will cause increased voltage sag under heavy loads. " +
                    "Monitor closely and plan replacement at the next scheduled service interval.";
         }
 
         // ── Rule 5: Electrolyte loss ──────────────────────────────────────
-        // Good IR + early voltage knee (severe voltage collapse without elevated IR)
-        if (flags.IRSeverity <= Severity.Normal && flags.VoltageCollapseSeverity >= Severity.Severe)
+        // Good IR + early voltage knee (severe voltage collapse without elevated IR).
+        // Gated on TestCompletedNormally because sag patterns are only meaningful
+        // when a full discharge curve was captured.
+        // Prefer granular SagClassification when topology is known.
+        bool sagSevereForRule5 = hasTopology
+            ? flags.SagClassification == SagStatus.OhmicCollapse
+            : flags.VoltageCollapseSeverity >= Severity.Severe;
+        bool irNormalForRule5 = hasTopology
+            ? flags.IRClassification <= IRStatus.Acceptable
+            : flags.IRSeverity <= Severity.Normal;
+
+        if (state.TestCompletedNormally && irNormalForRule5 && sagSevereForRule5)
         {
             return "FAIL – Electrolyte loss suspected. " +
                    "Internal resistance is within normal limits but a premature voltage knee was observed during discharge. " +
@@ -317,7 +357,13 @@ internal sealed class DiagnosticAnalyzer
         }
 
         // ── Rule 7: Capacity-only failure with normal IR ──────────────────
-        if (flags.CapacityFail && flags.IRSeverity == Severity.Normal)
+        // Gated on TestCompletedNormally: if the test aborted early, capacity data
+        // may not reflect the true deliverable capacity of the battery.
+        bool irNormalForRule7 = hasTopology
+            ? flags.IRClassification <= IRStatus.Acceptable
+            : flags.IRSeverity == Severity.Normal;
+
+        if (state.TestCompletedNormally && flags.CapacityFail && irNormalForRule7)
         {
             return "FAIL – Capacity below acceptance threshold. " +
                    "Internal resistance is within normal limits, suggesting the battery retains structural integrity " +
