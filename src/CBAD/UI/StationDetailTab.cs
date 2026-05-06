@@ -1127,7 +1127,7 @@ internal sealed class StationDetailTab : UserControl
             _txtDiagExplanation.Text = report.TechnicianExplanation;
 
             // Colour-code the explanation: green for pass, red/amber for fail.
-            _txtDiagExplanation.ForeColor = report.IsPass
+            _txtDiagExplanation.ForeColor = report.MeetsAcceptanceCriteria
                 ? System.Drawing.Color.FromArgb(0, 130, 60)
                 : (report.TechnicianExplanation.StartsWith("CAUTION", StringComparison.OrdinalIgnoreCase)
                     ? System.Drawing.Color.FromArgb(180, 100, 0)
