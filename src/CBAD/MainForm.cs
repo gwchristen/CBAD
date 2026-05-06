@@ -48,9 +48,10 @@ internal class MainForm : Form
     private bool _isDarkMode = false;
 
     // Quick-access toolbar controls
-    private readonly ComboBox _cbQuickPort = new();
-    private readonly Button   _btnStart    = new();
-    private readonly Button   _btnStop     = new();
+    private readonly ComboBox _cbQuickPort  = new();
+    private readonly Button   _btnStart     = new();
+    private readonly Button   _btnStop      = new();
+    private readonly Button   _btnClearAll  = new();
 
     private CancellationTokenSource? _cts;
     private Task? _captureTask;
@@ -375,11 +376,35 @@ internal class MainForm : Form
                 t => AppLog.Error("StopCaptureAsync error", t.Exception?.InnerException ?? t.Exception ?? new Exception("Unknown error")),
                 TaskContinuationOptions.OnlyOnFaulted);
 
+        _btnClearAll.Text      = "🗑  Clear All";
+        _btnClearAll.Font      = new Font(SystemFonts.DefaultFont, FontStyle.Bold);
+        _btnClearAll.AutoSize  = true;
+        _btnClearAll.Height    = 26;
+        _btnClearAll.FlatStyle = FlatStyle.Flat;
+        _btnClearAll.ForeColor = Color.White;
+        _btnClearAll.BackColor = Color.FromArgb(130, 80, 20);
+        _btnClearAll.FlatAppearance.BorderColor = Color.FromArgb(90, 55, 10);
+        _btnClearAll.Margin    = new Padding(6, 4, 0, 0);
+        _btnClearAll.Click    += (_, __) =>
+        {
+            var confirm = MessageBox.Show(
+                $"Clear all captured data for all 4 stations?{Environment.NewLine}This cannot be undone.",
+                "Clear All Station Data",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+
+            if (confirm != DialogResult.Yes) return;
+
+            foreach (var tab in _detailTabs)
+                tab.ClearStation();
+        };
+
         toolFlow.Controls.Add(portLabel);
         toolFlow.Controls.Add(_cbQuickPort);
         toolFlow.Controls.Add(btnRefresh);
         toolFlow.Controls.Add(_btnStart);
         toolFlow.Controls.Add(_btnStop);
+        toolFlow.Controls.Add(_btnClearAll);
 
         toolbarRow.Controls.Add(toolFlow);
 
