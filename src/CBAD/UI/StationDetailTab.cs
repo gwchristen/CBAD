@@ -624,8 +624,8 @@ internal sealed class StationDetailTab : UserControl
         plot.FigureBackground.Color = ScottPlot.Colors.WhiteSmoke;
         plot.DataBackground.Color   = ScottPlot.Colors.White;
 
-        // Show legend
-        plot.ShowLegend();
+        // Show legend in the upper-left so it stays out of the way as data grows rightward
+        plot.ShowLegend(ScottPlot.Alignment.UpperLeft);
     }
 
     private void WireExport()
