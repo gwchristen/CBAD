@@ -663,72 +663,81 @@ internal sealed class StationDetailTab : UserControl
 
             if (confirm != DialogResult.Yes) return;
 
-            // Clear the shared state buffers.  Both the button click and
-            // ProcessLine are dispatched on the UI thread (via BeginInvoke in the
-            // serial capture service), so no additional locking is required.
-            if (_lastState is not null)
-            {
-                _lastState.History.Clear();
-                _lastState.RawLines.Clear();
-                _lastState.Latest             = null;
-                _lastState.TargetCapacity     = null;
-                _lastState.FailureReason      = null;
-                _lastState.LastActiveEventCode = null;
-                _lastState.LastActiveRecord    = null;
-            }
-            _lastState = null;
-
-            // Reset the chart to a clean baseline.  plot.Clear() removes all
-            // plotted series (including the crosshair plottable); the axis/grid/
-            // background settings from BuildChart() remain in place and do not
-            // need to be reapplied.
-            var plot = _formsPlot.Plot;
-            plot.Clear();
-            _crosshair = null;
-            
-            if (_formsPlot.Width > 0 && _formsPlot.Height > 0)
-            {
-                _formsPlot.Refresh();
-            }
-
-            // Clear the raw stream display.
-            _txtStream.Clear();
-
-            // Hide the chart tooltip.
-            _lblChartTooltip.Text    = string.Empty;
-            _lblChartTooltip.Visible = false;
-
-            // Reset all UI labels to their default empty states.
-            _lblBatteryId.Text   = "Battery: —";
-            _lblStatusDot.BackColor = System.Drawing.Color.LightGray; // matches initial value in BuildEssentialsPanel
-            _lblStatus.Text      = "No data";
-            _lblStatus.ForeColor = AppTheme.MutedFg(_isDark);
-            _lblStatus.Font      = new System.Drawing.Font(
-                _lblStatus.Font.FontFamily,
-                _lblStatus.Font.Size,
-                System.Drawing.FontStyle.Regular);
-            _lblVoltage.Text     = "Voltage: —";
-            _lblCurrent.Text     = "Current: —";
-            _lblHealth.Text      = "Health: —";
-            _lblTemp.Text        = "Temp: —";
-            _lblLastUpdate.Text  = "No data yet — connect and start capture";
-
-            // Advanced section labels
-            _lblStation.Text        = "—";
-            _lblLastUpdateAdv.Text  = "—";
-            _lblDate.Text           = "—";
-            _lblTime.Text           = "—";
-            _lblEventCode.Text      = "—";
-            _lblBatteryType.Text    = "—";
-            _lblHealthCurrent.Text  = "—";
-            _lblHealthPrev.Text     = "—";
-            _lblTargetCap.Text      = "—";
-            _lblResistance.Text     = "—";
-
-            // Diagnostic explanation
-            _txtDiagExplanation.Text      = "No diagnostic data — run a test with an active profile.";
-            _txtDiagExplanation.ForeColor = AppTheme.MutedFg(_isDark);
+            ClearStation();
         };
+    }
+
+    /// <summary>
+    /// Clears all captured data and resets the UI for this station.
+    /// Can be called programmatically (e.g. from the "Clear All" toolbar button).
+    /// </summary>
+    public void ClearStation()
+    {
+        // Clear the shared state buffers.  Both the button click and
+        // ProcessLine are dispatched on the UI thread (via BeginInvoke in the
+        // serial capture service), so no additional locking is required.
+        if (_lastState is not null)
+        {
+            _lastState.History.Clear();
+            _lastState.RawLines.Clear();
+            _lastState.Latest             = null;
+            _lastState.TargetCapacity     = null;
+            _lastState.FailureReason      = null;
+            _lastState.LastActiveEventCode = null;
+            _lastState.LastActiveRecord    = null;
+        }
+        _lastState = null;
+
+        // Reset the chart to a clean baseline.  plot.Clear() removes all
+        // plotted series (including the crosshair plottable); the axis/grid/
+        // background settings from BuildChart() remain in place and do not
+        // need to be reapplied.
+        var plot = _formsPlot.Plot;
+        plot.Clear();
+        _crosshair = null;
+
+        if (_formsPlot.Width > 0 && _formsPlot.Height > 0)
+        {
+            _formsPlot.Refresh();
+        }
+
+        // Clear the raw stream display.
+        _txtStream.Clear();
+
+        // Hide the chart tooltip.
+        _lblChartTooltip.Text    = string.Empty;
+        _lblChartTooltip.Visible = false;
+
+        // Reset all UI labels to their default empty states.
+        _lblBatteryId.Text   = "Battery: —";
+        _lblStatusDot.BackColor = System.Drawing.Color.LightGray; // matches initial value in BuildEssentialsPanel
+        _lblStatus.Text      = "No data";
+        _lblStatus.ForeColor = AppTheme.MutedFg(_isDark);
+        _lblStatus.Font      = new System.Drawing.Font(
+            _lblStatus.Font.FontFamily,
+            _lblStatus.Font.Size,
+            System.Drawing.FontStyle.Regular);
+        _lblVoltage.Text     = "Voltage: —";
+        _lblCurrent.Text     = "Current: —";
+        _lblHealth.Text      = "Health: —";
+        _lblTemp.Text        = "Temp: —";
+        _lblLastUpdate.Text  = "No data yet — connect and start capture";
+
+        // Advanced section labels
+        _lblStation.Text        = "—";
+        _lblLastUpdateAdv.Text  = "—";
+        _lblDate.Text           = "—";
+        _lblTime.Text           = "—";
+        _lblEventCode.Text      = "—";
+        _lblBatteryType.Text    = "—";
+        _lblHealthCurrent.Text  = "—";
+        _lblHealthPrev.Text     = "—";
+        _lblTargetCap.Text      = "—";
+        _lblResistance.Text     = "—";
+
+        // Diagnostic explanation
+        _txtDiagExplanation.Text      = "No diagnostic data — run a test with an active profile.";
+        _txtDiagExplanation.ForeColor = AppTheme.MutedFg(_isDark);
     }
 
     private void WireChartMouse()
