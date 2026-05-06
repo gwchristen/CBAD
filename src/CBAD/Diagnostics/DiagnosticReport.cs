@@ -23,5 +23,5 @@ internal sealed class DiagnosticReport
     /// semantic distinction explicit: passing all criteria is a stricter bar than merely
     /// being serviceable.
     /// </summary>
-    public bool MeetsAcceptanceCriteria { get; init; }
+    public required bool MeetsAcceptanceCriteria { get; init; }
 }

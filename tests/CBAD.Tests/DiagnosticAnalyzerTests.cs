@@ -561,13 +561,12 @@ public class DiagnosticAnalyzerTests
     public void Analyze_CapacityFailWithNormalIR_ReturnsCapacityFadeExplanation()
     {
         // 3S2P: pack IR = 20 mΩ → cell IR = 13.3 mΩ → IRStatus.Acceptable (normal).
-        // Capacity = 50% → CapacityFail = true.  No sag data.  Test completed normally.
+        // Capacity = 50% → CapacityFail = true.  No sag data.  Test completed normally (default).
         var analyzer = new DiagnosticAnalyzer();
         var state = new StationState
         {
-            Station             = 1,
-            TestCompletedNormally = true,
-            Latest              = new CadexRecord { HealthCurrent = 50, ResistanceMOhm = 20, EventCode = 250, Station = 1 },
+            Station = 1,
+            Latest  = new CadexRecord { HealthCurrent = 50, ResistanceMOhm = 20, EventCode = 250, Station = 1 },
         };
         var profile = MakeProfile(targetCapPct: 70.0, volts: 6.0);
 
