@@ -1,5 +1,6 @@
 using CBAD.Models;
 using CBAD.Parsing;
+using CBAD.Diagnostics;
 
 namespace CBAD.Tests;
 
@@ -163,9 +164,9 @@ public class CadexEventParserTests
     }
 
     [Fact]
-    public void DetermineFailureReason_Code142_ReturnsDischargeTimeout()
+    public void DetermineFailureReason_Code142_ReturnsCapacityAdvisory()
     {
-        Assert.Equal("Discharge Timeout",
+        Assert.Equal("Capacity > 250% of rating",
             CadexEventParser.DetermineFailureReason(142, null));
     }
 
@@ -215,6 +216,25 @@ public class CadexEventParserTests
     public void IsFailureCode_ReturnsExpected(int code, bool expected)
     {
         Assert.Equal(expected, CadexEventParser.IsFailureCode(code));
+    }
+
+    [Theory]
+    [InlineData(129, true)]  // Intermittent battery (forced fail)
+    [InlineData(170, true)]  // Configuration fault (invalid test)
+    [InlineData(177, false)] // Advisory undercharged
+    public void IsFaultIndicatorCode_ReturnsExpected(int code, bool expected)
+    {
+        Assert.Equal(expected, CadexEventParser.IsFaultIndicatorCode(code));
+    }
+
+    [Fact]
+    public void CadexCodeMap_DefinitionFor120_IsSystemConditionOverVoltageForcedFail()
+    {
+        Assert.True(CadexCodeMap.TryGetDefinition(120, out var definition));
+        Assert.Equal(DiagnosticAxis.SystemCondition, definition.Axis);
+        Assert.Equal(FailureMode.OverVoltage, definition.Mode);
+        Assert.True(definition.ForcesFail);
+        Assert.False(definition.InvalidatesTest);
     }
 
     // ── CadexEventParser.IsSessionStartCode ─────────────────────────────

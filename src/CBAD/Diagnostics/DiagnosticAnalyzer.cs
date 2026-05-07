@@ -58,6 +58,8 @@ internal sealed class DiagnosticAnalyzer
         var explanation    = EvaluateRules(classification, state, profile);
 
         bool meetsAcceptanceCriteria = !classification.CapacityFail
+                      && !classification.ForcedFailure
+                      && !classification.TestInvalid
                       && classification.IRSeverity                 <= Severity.Normal
                       && classification.VoltageCollapseSeverity    <= Severity.Normal
                       && classification.ThermalAbnormalitySeverity <= Severity.Normal;
@@ -216,6 +218,22 @@ internal sealed class DiagnosticAnalyzer
             c.IRClassification >= IRStatus.Fail &&
             c.SagClassification == SagStatus.OhmicCollapse;
 
+        if (state.LastFaultEventCode is int terminalCode
+            && CadexCodeMap.TryGetDefinition(terminalCode, out var definition))
+        {
+            c.TestInvalid |= definition.InvalidatesTest;
+            c.ForcedFailure |= definition.ForcesFail;
+
+            if (definition.Mode != FailureMode.None)
+                c.PrimaryFailureMode = definition.Mode;
+
+            if (definition.Axis == DiagnosticAxis.Stability)
+                c.IntermittentBehaviorDetected = true;
+
+            if (definition.Axis == DiagnosticAxis.ChargeAcceptance)
+                c.ChargeAcceptanceFail = true;
+        }
+
         return c;
     }
 
@@ -236,14 +254,55 @@ internal sealed class DiagnosticAnalyzer
         // When false (topology unknown), fall back to the legacy Severity path.
         bool hasTopology = profile.CellsInSeries > 0 && profile.StringsInParallel > 0;
 
+        if (flags.TestInvalid)
+        {
+            return "TEST INVALID – Cadex reported a hardware/setup interruption. " +
+                   "Battery condition is unknown; verify station configuration and repeat the test.";
+        }
+
+        if (flags.IntermittentBehaviorDetected)
+        {
+            return "FAIL – Intermittent connection or instability detected. " +
+                   "Battery-to-adapter contact is not stable; inspect terminals, adapter fit, and leads.";
+        }
+
+        if (flags.ChargeAcceptanceFail)
+        {
+            return "FAIL – Charge acceptance instability detected. " +
+                   "Battery could not maintain stable charge-control behavior under the programmed limits.";
+        }
+
+        if (flags.PrimaryFailureMode is FailureMode.OverVoltage or FailureMode.InternalShort or FailureMode.Reversal)
+        {
+            return flags.PrimaryFailureMode switch
+            {
+                FailureMode.OverVoltage =>
+                    "FAIL – Catastrophic electrical condition: over-voltage detected. " +
+                    "Stop use and inspect charger-analyzer setup before retesting.",
+                FailureMode.InternalShort =>
+                    "FAIL – Catastrophic electrical condition: internal short detected. " +
+                    "Battery is unsafe for service and should be removed from operation.",
+                FailureMode.Reversal =>
+                    "FAIL – Catastrophic electrical condition: battery reversal detected. " +
+                    "Verify polarity and remove battery from service pending inspection.",
+                _ => "FAIL – Catastrophic electrical condition detected.",
+            };
+        }
+
         // ── All-pass ──────────────────────────────────────────────────────
         if (!flags.CapacityFail
+            && !flags.ForcedFailure
             && flags.IRSeverity                 <= Severity.Normal
             && flags.VoltageCollapseSeverity    <= Severity.Normal
             && flags.ThermalAbnormalitySeverity <= Severity.Normal)
         {
             return "PASS – Battery meets all acceptance criteria. " +
-                   "Capacity, internal resistance, and voltage behaviour are within normal limits.";
+                   "Capacity, internal resistance, and voltage behavior are within normal limits.";
+        }
+
+        if (flags.ForcedFailure)
+        {
+            return "FAIL – Cadex reported a terminal failure condition that overrides metric-only pass criteria.";
         }
 
         // ── Rule 1: Catastrophic IR – internal resistance collapse ────────
@@ -393,4 +452,3 @@ internal sealed class DiagnosticAnalyzer
     private static double EstimateCellCount(double packVoltage)
         => packVoltage > 0 ? Math.Max(1, Math.Round(packVoltage / 2.0)) : DefaultCellCount;
 }
-

@@ -117,10 +117,10 @@ internal sealed class StationStateManager
                 state.LastActiveEventCode = record.EventCode;
                 state.LastActiveRecord    = record;
 
-                // If this event code is a known fault indicator, keep it sticky so
+                // If this event code is a known terminal-fault indicator, keep it sticky so
                 // that subsequent non-fault status events do not overwrite it before
                 // the final failure event (16 / 116) arrives.
-                if (CadexEventParser.DetermineFailureReason(record.EventCode, record) is not null)
+                if (CadexEventParser.IsFaultIndicatorCode(record.EventCode))
                 {
                     state.LastFaultEventCode   = record.EventCode;
                     state.LastFaultRecord      = record;
