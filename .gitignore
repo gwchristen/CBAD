@@ -6,3 +6,4 @@ obj/
 *.userprefs
 *.csproj.user
 logs/
+*.pdf
