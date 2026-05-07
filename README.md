@@ -11,6 +11,8 @@ This app captures raw serial data and saves it to timestamped files.
 - .NET 8 SDK
 - USB-to-Serial adapter connected to Cadex 7400ER
 
+> The Cadex C7x00 user manual (hardware reference) is available from the Cadex website or can be found via the manufacturer's support resources.
+
 ### Build & Run
 
 ```powershell
