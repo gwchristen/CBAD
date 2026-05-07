@@ -1,7 +1,6 @@
 using System.Drawing;
 using System.IO.Ports;
 using CBAD.Models;
-using CBAD.Simulation;
 using CBAD.UI;
 using CBAD.WebServer;
 
@@ -23,7 +22,6 @@ internal class MainForm : Form
         Reconnect        = true,
         ReconnectDelayMs = 2000,
     };
-    private bool _simulationMode = false;
 
     // Status indicator controls (header)
     private readonly Label _lblStatusDot    = new() { AutoSize = false, Width = 14, Height = 14, Margin = new Padding(0, 2, 8, 0) };
@@ -53,9 +51,7 @@ internal class MainForm : Form
     private readonly Button   _btnStop      = new();
     private readonly Button   _btnClearAll  = new();
 
-    private CancellationTokenSource? _cts;
-    private Task? _captureTask;
-    private ILineSink? _sink;
+    private readonly CaptureController _captureController;
 
     // Station state manager — holds ring-buffer history; owns parse + update logic.
     private readonly StationStateManager _stateManager = new();
@@ -82,6 +78,7 @@ internal class MainForm : Form
         StartPosition = FormStartPosition.CenterScreen;
 
         _dashboardServer = new DashboardServer(_stateManager);
+        _captureController = new CaptureController();
 
         BuildUi();
 
@@ -93,6 +90,24 @@ internal class MainForm : Form
         };
         _stateManager.ParseFailed += line =>
             AppLog.Warn($"Parse failed: {line}");
+
+        _captureController.LifecycleChanged += (state, detail) =>
+        {
+            if (IsHandleCreated && InvokeRequired)
+            {
+                BeginInvoke(() => SetLifecycleState(state, detail));
+                return;
+            }
+            SetLifecycleState(state, detail);
+        };
+        _captureController.RawLineReceived += line =>
+        {
+            if (IsHandleCreated && InvokeRequired)
+                BeginInvoke(() => _stateManager.ProcessLine(line));
+            else
+                _stateManager.ProcessLine(line);
+        };
+        _captureController.StatusChanged += status => SetStatus(status);
 
         if (startupDefaults is not null)
             ApplyStartupDefaults(startupDefaults);
@@ -372,8 +387,8 @@ internal class MainForm : Form
         _btnStop.FlatAppearance.BorderColor = Color.FromArgb(120, 20, 20);
         _btnStop.Margin    = new Padding(0, 4, 0, 0);
         _btnStop.Click    += (_, __) =>
-            _ = StopCaptureAsync().ContinueWith(
-                t => AppLog.Error("StopCaptureAsync error", t.Exception?.InnerException ?? t.Exception ?? new Exception("Unknown error")),
+            _ = _captureController.StopAsync().ContinueWith(
+                t => AppLog.Error("CaptureController.StopAsync error", t.Exception?.InnerException ?? t.Exception ?? new Exception("Unknown error")),
                 TaskContinuationOptions.OnlyOnFaulted);
 
         _btnClearAll.Text      = "🗑  Clear All";
@@ -525,9 +540,8 @@ internal class MainForm : Form
             Reconnect        = _currentOptions.Reconnect,
             ReconnectDelayMs = _currentOptions.ReconnectDelayMs,
         };
-        _simulationMode = false;
-        _ = StartCaptureAsync().ContinueWith(
-            t => AppLog.Error("StartCaptureAsync error", t.Exception?.InnerException ?? t.Exception ?? new Exception("Unknown error")),
+        _ = _captureController.StartAsync(_currentOptions, simulationMode: false).ContinueWith(
+            t => AppLog.Error("CaptureController.StartAsync error", t.Exception?.InnerException ?? t.Exception ?? new Exception("Unknown error")),
             TaskContinuationOptions.OnlyOnFaulted);
     }
 
@@ -602,7 +616,7 @@ internal class MainForm : Form
             _statusStripLabel.Text = state switch
             {
                 CaptureLifecycleState.Running =>
-                    _simulationMode
+                    _captureController.IsSimulationMode
                         ? "🟢 Connected: Demo Mode"
                         : $"🟢 Connected: {_currentOptions.Port} ({_currentOptions.Baud})",
                 CaptureLifecycleState.Starting => "🟡 Connecting…",
@@ -618,119 +632,6 @@ internal class MainForm : Form
         _btnStart.Enabled    = canStart;
         _btnStop.Enabled     = canStop;
         _cbQuickPort.Enabled = canStart;
-    }
-
-    private async Task StartCaptureAsync()
-    {
-        if (_captureTask is not null)
-            return;
-
-        SetLifecycleState(CaptureLifecycleState.Starting);
-
-        try
-        {
-            _sink = CreateSink();
-
-            _cts = new CancellationTokenSource();
-
-            if (_simulationMode)
-            {
-                AppLog.Info("Starting simulation mode");
-                var sim = new SimulationService(
-                    onRawLine: OnRawLine,
-                    onStatus: SetStatus,
-                    onData: null);
-
-                _captureTask = Task.Run(() => sim.RunAsync(_cts.Token));
-            }
-            else
-            {
-                AppLog.Info($"Starting capture on {_currentOptions.Port} @ {_currentOptions.Baud} baud");
-                var service = new SerialCaptureService(
-                    _currentOptions,
-                    _sink,
-                    onData: null,
-                    onStatus: SetStatus,
-                    onRawLine: OnRawLine);
-
-                _captureTask = Task.Run(() => service.RunAsync(_cts.Token));
-            }
-
-            SetLifecycleState(CaptureLifecycleState.Running, $"Logging to: {_sink.Path}");
-
-            await Task.Yield();
-        }
-        catch (Exception ex)
-        {
-            AppLog.Error("Cannot start capture", ex);
-            SetLifecycleState(CaptureLifecycleState.Error, ex.Message);
-            MessageBox.Show(this, ex.Message, "Cannot start capture", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            await StopCaptureAsync();
-        }
-    }
-
-    private ILineSink CreateSink()
-    {
-        var outDir = _currentOptions.OutDir?.Trim();
-        if (string.IsNullOrWhiteSpace(outDir))
-            throw new InvalidOperationException("Please select an output folder.");
-
-        var prefix = _currentOptions.Prefix?.Trim();
-        if (string.IsNullOrWhiteSpace(prefix))
-            prefix = "cadex_raw";
-
-        return _currentOptions.Csv
-            ? new CsvLineSink(outDir, prefix)
-            : new RawLineSink(outDir, prefix);
-    }
-
-    private void OnRawLine(string line)
-    {
-        // All state mutations and UI updates happen on the UI thread to avoid data races.
-        BeginInvoke(() => _stateManager.ProcessLine(line));
-    }
-
-    private async Task StopCaptureAsync()
-    {
-        var cts = _cts;
-        var captureTask = _captureTask;
-        var sink = _sink;
-
-        // Clear fields first to prevent re-entry.
-        _cts = null;
-        _captureTask = null;
-        _sink = null;
-
-        // Show Stopping state only if we weren't already in an error state.
-        if (_lifecycleState != CaptureLifecycleState.Error)
-            SetLifecycleState(CaptureLifecycleState.Stopping);
-
-        try { cts?.Cancel(); }
-        catch (Exception ex)
-        {
-            AppLog.Error("CancellationTokenSource.Cancel error", ex);
-            System.Diagnostics.Debug.WriteLine($"Cancel error: {ex.Message}");
-        }
-        cts?.Dispose();
-
-        if (captureTask is not null)
-        {
-            try { await captureTask; }
-            catch (OperationCanceledException) { }
-            catch (Exception ex)
-            {
-                AppLog.Error("Capture task stopped with error", ex);
-                System.Diagnostics.Debug.WriteLine($"Capture task stopped with error: {ex.Message}");
-            }
-        }
-
-        sink?.Dispose();
-
-        AppLog.Info("Capture stopped");
-
-        // Preserve error state visibility; only reset to Idle on a clean stop.
-        if (_lifecycleState != CaptureLifecycleState.Error)
-            SetLifecycleState(CaptureLifecycleState.Idle, "Stopped");
     }
 
     /// <summary>
@@ -761,23 +662,22 @@ internal class MainForm : Form
     /// </summary>
     private void OpenConnectionSettings()
     {
-        bool isRunning = _captureTask is not null;
-        using var form = new ConnectionSettingsForm(_currentOptions, isRunning, _simulationMode);
+        bool isRunning = _captureController.IsRunning;
+        using var form = new ConnectionSettingsForm(_currentOptions, isRunning, _captureController.IsSimulationMode);
         form.ShowDialog(this);
 
         switch (form.Action)
         {
             case ConnectionAction.Connect:
                 _currentOptions  = form.GetOptions();
-                _simulationMode  = form.SimulationMode;
-                _ = StartCaptureAsync().ContinueWith(
-                    t => AppLog.Error("StartCaptureAsync error", t.Exception?.InnerException ?? t.Exception!),
+                _ = _captureController.StartAsync(_currentOptions, form.SimulationMode).ContinueWith(
+                    t => AppLog.Error("CaptureController.StartAsync error", t.Exception?.InnerException ?? t.Exception!),
                     TaskContinuationOptions.OnlyOnFaulted);
                 break;
 
             case ConnectionAction.Disconnect:
-                _ = StopCaptureAsync().ContinueWith(
-                    t => AppLog.Error("StopCaptureAsync error", t.Exception?.InnerException ?? t.Exception!),
+                _ = _captureController.StopAsync().ContinueWith(
+                    t => AppLog.Error("CaptureController.StopAsync error", t.Exception?.InnerException ?? t.Exception!),
                     TaskContinuationOptions.OnlyOnFaulted);
                 break;
         }
@@ -785,16 +685,16 @@ internal class MainForm : Form
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
-        if (_captureTask is not null)
+        if (_captureController.IsRunning)
         {
             // Defer close until the capture task has fully stopped to avoid
             // disposing the sink while the background task may still be writing.
             e.Cancel = true;
-            _ = StopCaptureAsync().ContinueWith(
+            _ = _captureController.StopAsync().ContinueWith(
                 t =>
                 {
                     if (t.IsFaulted)
-                        System.Diagnostics.Debug.WriteLine($"StopCaptureAsync error during close: {t.Exception}");
+                        System.Diagnostics.Debug.WriteLine($"CaptureController.StopAsync error during close: {t.Exception}");
                     return _dashboardServer.DisposeAsync().AsTask().ContinueWith(
                         dt =>
                         {
