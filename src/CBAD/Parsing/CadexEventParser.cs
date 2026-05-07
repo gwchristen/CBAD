@@ -1,4 +1,5 @@
 using CBAD.Models;
+using CBAD.Diagnostics;
 
 namespace CBAD.Parsing;
 
@@ -154,49 +155,21 @@ internal static class CadexEventParser
             // High cell resistance
             135 or 136 when lastRecord?.ResistanceMOhm.HasValue == true
                 => $"High Cell Resistance ({lastRecord.ResistanceMOhm} mΩ)",
-            135 or 136
-                => "High Cell Resistance",
 
-            // Target capacity warning that ultimately wasn't corrected
-            115 => "Target Capacity Not Met",
+            _ when CadexCodeMap.TryGetDefinition(lastEventCode, out var definition)
+                => definition.Message,
 
-            // Timeout codes
-            144 => "Charge Timeout",
+            // Legacy fallback mappings for historical codes not yet in causal map
             142 => "Discharge Timeout",
             146 => "Recondition Timeout",
             33  => "User Programmed Timeout",
             113 => "Plateau Timeout",
-
-            // Voltage / current faults
             112 => "Cell Mismatch",
-            120 => "Over Voltage",
-            121 => "Battery Reversed",
-            122 => "Battery Shorted",
-            123 or 124 or 125 or 126 or 127 => "Low Voltage",
-            128 => "Unable to Clamp Charge Voltage",
             130 => "Current Rise at Full Charge",
-
-            // Physical / electrical faults
-            129 => "Intermittent Battery",
-            160 => "Bad Fuse or Driver",
-            162 => "Discharge Current Low",
-            164 => "Charge Current Low",
-            170 => "Calibration Fault",
-
-            // Temperature faults
             14  => "Battery Over Temperature",
             152 or 154 or 156 or 158 => "Temperature Failure",
-            159 => "Hot Battery on Trickle Charge",
-            150 => "Thermistor Failure",
-
-            // Charge state faults
             175 or 177 => "Battery Undercharged",
             176 or 178 => "Battery Overcharged",
-
-            // Service interruption
-            188 => "Service Interrupted",
-
-            // Adapter / C-code faults
             208 => "Adapter Not Set Up",
             209 => "Adapter Data Invalid",
             210 => "Bad Adapter",
@@ -210,6 +183,14 @@ internal static class CadexEventParser
     /// </summary>
     public static bool IsFailureCode(int eventCode) =>
         eventCode is 116 or 16;
+
+    /// <summary>
+    /// Returns <c>true</c> when the code is classified in the causal registry
+    /// as a forced-failure or test-invalidating condition.
+    /// </summary>
+    public static bool IsFaultIndicatorCode(int eventCode) =>
+        CadexCodeMap.TryGetDefinition(eventCode, out var definition)
+        && (definition.ForcesFail || definition.InvalidatesTest);
 
     /// <summary>
     /// Returns <c>true</c> for event codes that represent a new battery-service

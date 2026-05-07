@@ -130,6 +130,33 @@ internal sealed class DiagnosticClassification
     /// <summary>Thermal classification using the <see cref="ThermalStatus"/> scale.</summary>
     public ThermalStatus ThermalClassification { get; set; }
 
+    /// <summary>
+    /// <c>true</c> when the terminal Cadex code indicates the test did not complete
+    /// in a diagnostically valid manner (hardware fault, setup issue, interruption).
+    /// </summary>
+    public bool TestInvalid { get; set; }
+
+    /// <summary>
+    /// <c>true</c> when the terminal Cadex code is a hard failure condition that
+    /// should force a failed interpretation even if scalar metrics look nominal.
+    /// </summary>
+    public bool ForcedFailure { get; set; }
+
+    /// <summary>
+    /// <c>true</c> when Cadex reported intermittent / unstable connection behavior.
+    /// </summary>
+    public bool IntermittentBehaviorDetected { get; set; }
+
+    /// <summary>
+    /// <c>true</c> when Cadex reported charge-acceptance or charge-control instability.
+    /// </summary>
+    public bool ChargeAcceptanceFail { get; set; }
+
+    /// <summary>
+    /// Primary mode inferred from the terminal Cadex code, when available.
+    /// </summary>
+    public FailureMode? PrimaryFailureMode { get; set; }
+
     // ── Parallel imbalance flags ──────────────────────────────────────────
 
     /// <summary>

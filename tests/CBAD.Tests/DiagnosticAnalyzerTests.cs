@@ -427,6 +427,82 @@ public class DiagnosticAnalyzerTests
         Assert.DoesNotContain("estimated topology", report.TechnicianExplanation, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Analyze_TestInvalidCode_PrioritizesInvalidResult()
+    {
+        var analyzer = new DiagnosticAnalyzer();
+        var state = new StationState
+        {
+            Station = 1,
+            LastFaultEventCode = 170,
+            Latest = new CadexRecord { HealthCurrent = 90, EventCode = 250, Station = 1 },
+        };
+        var profile = MakeProfile(targetCapPct: 70.0, volts: 6.0);
+
+        var report = analyzer.Analyze(state, profile);
+
+        Assert.True(report.Classification.TestInvalid);
+        Assert.StartsWith("TEST INVALID", report.TechnicianExplanation, StringComparison.Ordinal);
+        Assert.False(report.MeetsAcceptanceCriteria);
+    }
+
+    [Fact]
+    public void Analyze_IntermittentCode_PrioritizesStabilityRule()
+    {
+        var analyzer = new DiagnosticAnalyzer();
+        var state = new StationState
+        {
+            Station = 1,
+            LastFaultEventCode = 129,
+            Latest = new CadexRecord { HealthCurrent = 90, EventCode = 250, Station = 1 },
+        };
+        var profile = MakeProfile(targetCapPct: 70.0, volts: 6.0);
+
+        var report = analyzer.Analyze(state, profile);
+
+        Assert.True(report.Classification.IntermittentBehaviorDetected);
+        Assert.Contains("Intermittent connection", report.TechnicianExplanation, StringComparison.OrdinalIgnoreCase);
+        Assert.False(report.MeetsAcceptanceCriteria);
+    }
+
+    [Fact]
+    public void Analyze_ChargeAcceptanceCode_PrioritizesChargeRule()
+    {
+        var analyzer = new DiagnosticAnalyzer();
+        var state = new StationState
+        {
+            Station = 1,
+            LastFaultEventCode = 128,
+            Latest = new CadexRecord { HealthCurrent = 90, EventCode = 250, Station = 1 },
+        };
+        var profile = MakeProfile(targetCapPct: 70.0, volts: 6.0);
+
+        var report = analyzer.Analyze(state, profile);
+
+        Assert.True(report.Classification.ChargeAcceptanceFail);
+        Assert.Contains("Charge acceptance instability", report.TechnicianExplanation, StringComparison.OrdinalIgnoreCase);
+        Assert.False(report.MeetsAcceptanceCriteria);
+    }
+
+    [Fact]
+    public void Analyze_OverVoltageCode_PrioritizesCatastrophicElectricalRule()
+    {
+        var analyzer = new DiagnosticAnalyzer();
+        var state = new StationState
+        {
+            Station = 1,
+            LastFaultEventCode = 120,
+            Latest = new CadexRecord { HealthCurrent = 90, EventCode = 250, Station = 1 },
+        };
+        var profile = MakeProfile(targetCapPct: 70.0, volts: 6.0);
+
+        var report = analyzer.Analyze(state, profile);
+
+        Assert.Equal(FailureMode.OverVoltage, report.Classification.PrimaryFailureMode);
+        Assert.Contains("over-voltage", report.TechnicianExplanation, StringComparison.OrdinalIgnoreCase);
+        Assert.False(report.MeetsAcceptanceCriteria);
+    }
+
     /// <summary>Rule 2 – legacy critical IR + severe sag (topology-unknown fallback path).</summary>
     [Fact]
     public void Analyze_CriticalLegacyIRAndSevereSag_UsesLegacyCollapseRule()
