@@ -278,7 +278,7 @@ internal sealed class DiagnosticAnalyzer
             {
                 FailureMode.OverVoltage =>
                     "FAIL – Catastrophic electrical condition: over-voltage detected. " +
-                    "Stop use and inspect charger/analyzer setup before retesting.",
+                    "Stop use and inspect charger-analyzer setup before retesting.",
                 FailureMode.InternalShort =>
                     "FAIL – Catastrophic electrical condition: internal short detected. " +
                     "Battery is unsafe for service and should be removed from operation.",
@@ -297,7 +297,7 @@ internal sealed class DiagnosticAnalyzer
             && flags.ThermalAbnormalitySeverity <= Severity.Normal)
         {
             return "PASS – Battery meets all acceptance criteria. " +
-                   "Capacity, internal resistance, and voltage behaviour are within normal limits.";
+                   "Capacity, internal resistance, and voltage behavior are within normal limits.";
         }
 
         if (flags.ForcedFailure)
