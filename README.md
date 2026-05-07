@@ -87,3 +87,12 @@ dotnet run --project src/CBAD -- --port COM4 --csv true
 - Trace-level logs are written to the debug output in development builds.
   Add a `TextWriterTraceListener` via `AppLog.AddFileListener(path)` in
   `Program.Main` to persist logs to a file.
+
+## Releasing
+
+Push a version tag to trigger an automated GitHub Release with a self-contained `CBAD.exe` attached:
+
+```powershell
+git tag v2.0.0
+git push origin v2.0.0
+```
