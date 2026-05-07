@@ -4,8 +4,8 @@ internal sealed class StationState
 {
     public int Station { get; init; }
     public CadexRecord? Latest { get; set; }
-    public List<CadexRecord> History { get; } = new();
-    public List<string> RawLines { get; } = new();
+    public Queue<CadexRecord> History { get; } = new();
+    public Queue<string> RawLines { get; } = new();
 
     /// <summary>
     /// The wall-clock time when the current battery-service session started.

@@ -137,13 +137,13 @@ internal sealed class StationStateManager
         else if (record.TargetCapacityPct.HasValue)
             state.TargetCapacity = $"{record.TargetCapacityPct}%";
 
-        state.History.Add(record);
+        state.History.Enqueue(record);
         if (state.History.Count > HistoryCapacity)
-            state.History.RemoveAt(0);
+            state.History.Dequeue();
 
-        state.RawLines.Add(line);
+        state.RawLines.Enqueue(line);
         if (state.RawLines.Count > RawLineCapacity)
-            state.RawLines.RemoveAt(0);
+            state.RawLines.Dequeue();
 
         StationUpdated?.Invoke(state);
     }

@@ -57,7 +57,7 @@ public class DiagnosticAnalyzerTests
         // Simulate discharge records spanning from peak to nadir voltage.
         for (int mV = peakMv; mV >= nadirMv; mV -= 50)
         {
-            state.History.Add(new CadexRecord
+            state.History.Enqueue(new CadexRecord
             {
                 EventCode   = 250,
                 ProcessCode = 7,
@@ -623,7 +623,7 @@ public class DiagnosticAnalyzerTests
             Station = 1,
             Latest  = new CadexRecord { HealthCurrent = 85, EventCode = 250, Station = 1 },
         };
-        state.History.Add(new CadexRecord { TemperatureC = 55, EventCode = 250, Station = 1 });
+        state.History.Enqueue(new CadexRecord { TemperatureC = 55, EventCode = 250, Station = 1 });
         var profile = MakeProfile(targetCapPct: 70.0, volts: 6.0);
 
         var report = analyzer.Analyze(state, profile);
