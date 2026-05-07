@@ -8,6 +8,7 @@ internal sealed class SerialCaptureService
 {
     private readonly AppOptions _options;
     private readonly ILineSink _sink;
+    private readonly Action<string>? _onConnected;
     private readonly Action<string>? _onData;
     private readonly Action<string>? _onStatus;
     private readonly Action<string>? _onRawLine;
@@ -15,12 +16,14 @@ internal sealed class SerialCaptureService
     public SerialCaptureService(
         AppOptions options,
         ILineSink sink,
+        Action<string>? onConnected = null,
         Action<string>? onData = null,
         Action<string>? onStatus = null,
         Action<string>? onRawLine = null)
     {
         _options = options;
         _sink = sink;
+        _onConnected = onConnected;
         _onData = onData;
         _onStatus = onStatus;
         _onRawLine = onRawLine;
@@ -36,6 +39,7 @@ internal sealed class SerialCaptureService
             {
                 port.Open();
                 AppLog.Info($"Connected: {_options.Port} @ {_options.Baud} baud");
+                _onConnected?.Invoke($"{_options.Port} @ {_options.Baud} baud");
                 _onStatus?.Invoke($"Connected: {_options.Port} @ {_options.Baud} baud");
 
                 // Register a callback so that cancellation closes the port, which unblocks
