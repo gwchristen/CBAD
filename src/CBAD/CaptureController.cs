@@ -47,12 +47,13 @@ internal sealed class CaptureController
             else
             {
                 AppLog.Info($"Starting capture on {_currentOptions.Port} @ {_currentOptions.Baud} baud");
+                var sinkPath = _sink.Path;
                 var service = new SerialCaptureService(
                     _currentOptions,
                     _sink,
                     onConnected: detail => LifecycleChanged?.Invoke(
                         CaptureLifecycleState.Running,
-                        $"Connected: {detail} | Logging to: {_sink?.Path}"),
+                        $"Connected: {detail} | Logging to: {sinkPath}"),
                     onData: null,
                     onStatus: status => StatusChanged?.Invoke(status),
                     onRawLine: line => RawLineReceived?.Invoke(line));

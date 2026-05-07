@@ -103,9 +103,11 @@ internal class MainForm : Form
         _captureController.RawLineReceived += line =>
         {
             if (IsHandleCreated && InvokeRequired)
+            {
                 BeginInvoke(() => _stateManager.ProcessLine(line));
-            else
-                _stateManager.ProcessLine(line);
+                return;
+            }
+            _stateManager.ProcessLine(line);
         };
         _captureController.StatusChanged += status => SetStatus(status);
 
