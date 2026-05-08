@@ -558,12 +558,15 @@ internal sealed class DashboardServer : IAsyncDisposable
 
             function renderConnection(connection) {
               const conn = connection || { state: 'Idle', detail: '', timestamp: null };
+              const state = conn.state ?? conn.State ?? 'Idle';
+              const detail = conn.detail ?? conn.Detail ?? '';
+              const timestamp = conn.timestamp ?? conn.Timestamp ?? null;
               const dot = document.getElementById('connection-dot');
-              dot.className = `connection-dot ${getConnectionCssClass(conn.state)}`.trim();
-              document.getElementById('connection-state').textContent = conn.state || 'Idle';
-              document.getElementById('connection-detail').textContent = conn.detail || '';
+              dot.className = `connection-dot ${getConnectionCssClass(state)}`.trim();
+              document.getElementById('connection-state').textContent = state;
+              document.getElementById('connection-detail').textContent = detail;
               document.getElementById('connection-time').textContent =
-                conn.timestamp ? ('As of ' + new Date(conn.timestamp).toLocaleTimeString()) : '';
+                timestamp ? ('As of ' + new Date(timestamp).toLocaleTimeString()) : '';
             }
 
             async function refresh() {
