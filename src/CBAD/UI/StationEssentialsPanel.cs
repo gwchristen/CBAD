@@ -108,7 +108,7 @@ internal sealed class StationEssentialsPanel : UserControl
                 ? $"{rec.EventCode} ({eventDesc})"
                 : $"{rec.EventCode} ({eventDesc}: {eventPayload})";
 
-            _lblBatteryType.Text = processCodeStr == "" ? "—" : $"{processCodeStr} ({CadexStatusCodes.Describe(processCodeStr)})";
+            _lblBatteryType.Text = string.IsNullOrEmpty(processCodeStr) ? "—" : $"{processCodeStr} ({CadexStatusCodes.Describe(processCodeStr)})";
             _lblHealthCurrent.Text = rec.HealthCurrent.HasValue ? $"{rec.HealthCurrent}%" : "—";
             _lblHealthPrev.Text = rec.HealthPrevious.HasValue ? $"{rec.HealthPrevious}%" : "—";
             _lblResistance.Text = rec.ResistanceMOhm.HasValue ? $"{rec.ResistanceMOhm} mΩ" : "—";
