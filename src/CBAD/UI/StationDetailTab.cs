@@ -358,7 +358,7 @@ internal sealed class StationDetailTab : UserControl
 
     private static void PaintThemedGroupBox(object? sender, PaintEventArgs e, bool isDark)
     {
-        if (!isDark || sender is not GroupBox gb) return;
+        if (!isDark || sender is null || sender is not GroupBox gb) return;
         var g  = e.Graphics;
 
         // Measure title text height to find where the top border line sits.
