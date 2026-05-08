@@ -82,6 +82,12 @@ internal class MainForm : Form
 
         BuildUi();
 
+        var settings = SettingsManager.Load();
+        _currentOptions = ToOptions(settings);
+        RefreshQuickPorts();
+        if (settings.DarkMode)
+            ApplyTheme(true);
+
         // Wire station-state events after UI controls exist.
         _stateManager.StationUpdated += state =>
         {
@@ -112,7 +118,10 @@ internal class MainForm : Form
         _captureController.StatusChanged += status => SetStatus(status);
 
         if (startupDefaults is not null)
+        {
             ApplyStartupDefaults(startupDefaults);
+            RefreshQuickPorts();
+        }
 
         SetLifecycleState(CaptureLifecycleState.Idle);
 
@@ -658,6 +667,50 @@ internal class MainForm : Form
         _currentOptions = opts;
     }
 
+    private AppSettings ToSettings(AppOptions options, bool isDark)
+        => new()
+        {
+            Port             = options.Port,
+            Baud             = options.Baud,
+            Parity           = options.Parity.ToString(),
+            DataBits         = options.DataBits,
+            StopBits         = options.StopBits.ToString(),
+            Handshake        = options.Handshake.ToString(),
+            OutDir           = options.OutDir,
+            Prefix           = options.Prefix,
+            Csv              = options.Csv,
+            Reconnect        = options.Reconnect,
+            ReconnectDelayMs = options.ReconnectDelayMs,
+            DarkMode         = isDark,
+        };
+
+    private AppOptions ToOptions(AppSettings settings)
+    {
+        var defaults = _currentOptions;
+
+        return new AppOptions
+        {
+            Port = string.IsNullOrWhiteSpace(settings.Port) ? defaults.Port : settings.Port,
+            Baud = settings.Baud > 0 ? settings.Baud : defaults.Baud,
+            Parity = Enum.TryParse<Parity>(settings.Parity, ignoreCase: true, out var parity)
+                ? parity
+                : defaults.Parity,
+            DataBits = settings.DataBits is >= 5 and <= 8 ? settings.DataBits : defaults.DataBits,
+            StopBits = Enum.TryParse<StopBits>(settings.StopBits, ignoreCase: true, out var stopBits)
+                ? stopBits
+                : defaults.StopBits,
+            Handshake = Enum.TryParse<Handshake>(settings.Handshake, ignoreCase: true, out var handshake)
+                ? handshake
+                : defaults.Handshake,
+            OutDir = string.IsNullOrWhiteSpace(settings.OutDir) ? defaults.OutDir : settings.OutDir,
+            Prefix = string.IsNullOrWhiteSpace(settings.Prefix) ? defaults.Prefix : settings.Prefix,
+            Csv = settings.Csv,
+            Reconnect = settings.Reconnect,
+            ReconnectDelayMs = settings.ReconnectDelayMs >= 100 ? settings.ReconnectDelayMs : defaults.ReconnectDelayMs,
+            ListPorts = defaults.ListPorts,
+        };
+    }
+
     /// <summary>
     /// Opens the Connection Settings popup.  Handles Connect / Disconnect actions
     /// returned from the dialog and starts or stops the serial capture accordingly.
@@ -709,6 +762,8 @@ internal class MainForm : Form
                 TaskScheduler.Default);
             return;
         }
+
+        SettingsManager.Save(ToSettings(_currentOptions, _isDarkMode));
 
         // Stop the web dashboard gracefully on close; log any failure.
         _ = _dashboardServer.DisposeAsync().AsTask().ContinueWith(
