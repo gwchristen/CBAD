@@ -351,16 +351,14 @@ internal sealed class StationDetailTab : UserControl
 
         // Custom border painting for dark mode — draws a flat themed border
         // and title text over the system-rendered GroupBox in dark mode.
-        group.Paint += OnAdvGroupPaint;
+        group.Paint += (s, e) => PaintThemedGroupBox(s, e, _isDark);
 
         return group;
     }
 
-    private void OnAdvGroupPaint(object? sender, PaintEventArgs e)
+    private static void PaintThemedGroupBox(object? sender, PaintEventArgs e, bool isDark)
     {
-        if (!_isDark) return;
-
-        var gb = (GroupBox)sender!;
+        if (!isDark || sender is not GroupBox gb) return;
         var g  = e.Graphics;
 
         // Measure title text height to find where the top border line sits.
@@ -448,7 +446,7 @@ internal sealed class StationDetailTab : UserControl
         _recordMetaGroup = group;
         _recordMetaTable = table;
 
-        group.Paint += OnRecordMetaGroupPaint;
+        group.Paint += (s, e) => PaintThemedGroupBox(s, e, _isDark);
 
         return group;
     }
@@ -473,57 +471,9 @@ internal sealed class StationDetailTab : UserControl
 
         _diagGroup = group;
 
-        group.Paint += OnDiagGroupPaint;
+        group.Paint += (s, e) => PaintThemedGroupBox(s, e, _isDark);
 
         return group;
-    }
-
-    private void OnDiagGroupPaint(object? sender, PaintEventArgs e)
-    {
-        if (!_isDark) return;
-
-        var gb = (GroupBox)sender!;
-        var g  = e.Graphics;
-
-        var textSize  = g.MeasureString(gb.Text, gb.Font);
-        int borderTop = (int)(textSize.Height / 2);
-
-        using var bgBrush = new System.Drawing.SolidBrush(gb.BackColor);
-        g.FillRectangle(bgBrush, 0, borderTop, gb.Width, gb.Height - borderTop);
-        g.FillRectangle(bgBrush, 0, 0, gb.Width, borderTop);
-
-        using var pen = new System.Drawing.Pen(AppTheme.BorderColor(true));
-        g.DrawRectangle(pen, new System.Drawing.Rectangle(0, borderTop, gb.Width - 1, gb.Height - borderTop - 1));
-
-        const float textX = 9f;
-        using var textBgBrush = new System.Drawing.SolidBrush(gb.BackColor);
-        g.FillRectangle(textBgBrush, textX - 2, 0, textSize.Width + 4, textSize.Height);
-        using var textBrush = new System.Drawing.SolidBrush(gb.ForeColor);
-        g.DrawString(gb.Text, gb.Font, textBrush, textX, 0);
-    }
-
-    private void OnRecordMetaGroupPaint(object? sender, PaintEventArgs e)
-    {
-        if (!_isDark) return;
-
-        var gb = (GroupBox)sender!;
-        var g  = e.Graphics;
-
-        var textSize  = g.MeasureString(gb.Text, gb.Font);
-        int borderTop = (int)(textSize.Height / 2);
-
-        using var bgBrush = new System.Drawing.SolidBrush(gb.BackColor);
-        g.FillRectangle(bgBrush, 0, borderTop, gb.Width, gb.Height - borderTop);
-        g.FillRectangle(bgBrush, 0, 0, gb.Width, borderTop);
-
-        using var pen = new System.Drawing.Pen(AppTheme.BorderColor(true));
-        g.DrawRectangle(pen, new System.Drawing.Rectangle(0, borderTop, gb.Width - 1, gb.Height - borderTop - 1));
-
-        const float textX = 9f;
-        using var textBgBrush = new System.Drawing.SolidBrush(gb.BackColor);
-        g.FillRectangle(textBgBrush, textX - 2, 0, textSize.Width + 4, textSize.Height);
-        using var textBrush = new System.Drawing.SolidBrush(gb.ForeColor);
-        g.DrawString(gb.Text, gb.Font, textBrush, textX, 0);
     }
 
     private void OnCommitRecord(object? sender, EventArgs e)
