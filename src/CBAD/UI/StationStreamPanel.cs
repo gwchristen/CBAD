@@ -1,11 +1,13 @@
 using CBAD.Models;
+using CBAD.Parsing;
 
 namespace CBAD.UI;
 
 internal sealed class StationStreamPanel : UserControl
 {
+    private const int NormalTelemetryEventCode = 250;
     private readonly int _station;
-    private readonly TextBox _txtStream;
+    private readonly RichTextBox _txtStream;
     private readonly Button _btnExport = new() { Text = "Export Raw Data…", Dock = DockStyle.Bottom, Height = 30 };
     private readonly CheckBox _chkAutoScroll = new() { Text = "Auto-scroll", Checked = true, AutoSize = true, Margin = new Padding(4, 4, 4, 3) };
     private readonly Button _btnPauseStream = new() { Text = "⏸  Pause", AutoSize = true, Margin = new Padding(4, 2, 4, 2) };
@@ -19,12 +21,12 @@ internal sealed class StationStreamPanel : UserControl
         _station = station;
         Dock = DockStyle.Fill;
 
-        _txtStream = new TextBox
+        _txtStream = new RichTextBox
         {
             Multiline = true,
             ReadOnly = true,
             WordWrap = false,
-            ScrollBars = ScrollBars.Both,
+            ScrollBars = RichTextBoxScrollBars.Both,
             Dock = DockStyle.Fill,
             Font = new System.Drawing.Font("Consolas", 9),
             BackColor = System.Drawing.Color.FromArgb(18, 24, 36),
@@ -98,13 +100,53 @@ internal sealed class StationStreamPanel : UserControl
         if (!string.IsNullOrEmpty(filter))
             lines = lines.Where(l => l.Contains(filter, StringComparison.OrdinalIgnoreCase));
 
-        _txtStream.Text = string.Join(Environment.NewLine, lines.TakeLast(200));
+        var filteredLines = lines.TakeLast(200);
+
+        _txtStream.SuspendLayout();
+        _txtStream.Clear();
+        foreach (var line in filteredLines)
+        {
+            _txtStream.SelectionColor = GetLineColor(line);
+            _txtStream.AppendText(line + Environment.NewLine);
+        }
+        _txtStream.ResumeLayout();
 
         if (_chkAutoScroll.Checked)
         {
             _txtStream.SelectionStart = _txtStream.TextLength;
             _txtStream.ScrollToCaret();
         }
+    }
+
+    internal static System.Drawing.Color GetLineColor(string line)
+    {
+        if (ContainsParseFailureMarker(line))
+            return System.Drawing.Color.FromArgb(255, 100, 100);
+
+        var fields = line.Split(',');
+        if (fields.Length <= 2 || !int.TryParse(fields[2].Trim(), out var eventCode))
+            return System.Drawing.Color.FromArgb(255, 100, 100);
+
+        if (CadexEventParser.IsFailureCode(eventCode))
+            return System.Drawing.Color.FromArgb(255, 80, 80);
+        if (CadexEventParser.IsSessionStartCode(eventCode))
+            return System.Drawing.Color.FromArgb(100, 220, 255);
+        if (CadexEventParser.IsFaultIndicatorCode(eventCode))
+            return System.Drawing.Color.FromArgb(255, 200, 80);
+        if (eventCode == NormalTelemetryEventCode)
+            return System.Drawing.Color.FromArgb(130, 210, 130);
+
+        return System.Drawing.Color.FromArgb(200, 200, 200);
+    }
+
+    private static bool ContainsParseFailureMarker(string line)
+    {
+        var normalizedLine = line
+            .Replace('_', ' ')
+            .Replace('-', ' ')
+            .Replace(':', ' ');
+
+        return normalizedLine.Contains("PARSE FAIL", StringComparison.OrdinalIgnoreCase);
     }
 
     private void WireExport()

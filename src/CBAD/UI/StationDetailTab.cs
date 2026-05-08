@@ -325,6 +325,9 @@ internal sealed class StationDetailTab : UserControl
         }
     }
 
+    private static System.Drawing.Color GetLineColor(string line) =>
+        StationStreamPanel.GetLineColor(line);
+
     public void ApplyTheme(bool isDark)
     {
         _isDark = isDark;

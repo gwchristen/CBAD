@@ -1,9 +1,11 @@
 using CBAD.Parsing;
+using CBAD.UI;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Threading;
 
 namespace CBAD.WebServer;
 
@@ -18,6 +20,10 @@ internal sealed class DashboardServer : IAsyncDisposable
     public const int Port = 5000;
 
     private readonly StationStateManager _manager;
+    private int _lifecycleStateValue = (int)CaptureLifecycleState.Idle;
+    private readonly object _lifecycleDetailLock = new();
+    private string? _lifecycleDetail;
+    private DateTimeOffset _lifecycleTimestampUtc = DateTimeOffset.UtcNow;
     private WebApplication? _app;
 
     public DashboardServer(StationStateManager manager)
@@ -79,6 +85,16 @@ internal sealed class DashboardServer : IAsyncDisposable
         }
     }
 
+    public void SetLifecycleState(CaptureLifecycleState state, string? detail)
+    {
+        Interlocked.Exchange(ref _lifecycleStateValue, (int)state);
+        lock (_lifecycleDetailLock)
+        {
+            _lifecycleDetail = detail;
+            _lifecycleTimestampUtc = DateTimeOffset.UtcNow;
+        }
+    }
+
     // ── Route registrations ──────────────────────────────────────────────
 
     private void RegisterRoutes(WebApplication app)
@@ -106,7 +122,10 @@ internal sealed class DashboardServer : IAsyncDisposable
                     SessionStart:   state.SessionStart
                 );
             }
-            return Results.Json(summaries);
+            return Results.Json(new DashboardPayload(
+                Connection: GetConnectionSummary(),
+                Stations: summaries
+            ));
         });
     }
 
@@ -130,7 +149,35 @@ internal sealed class DashboardServer : IAsyncDisposable
         }
     }
 
+    private ConnectionSummary GetConnectionSummary()
+    {
+        var state = (CaptureLifecycleState)Volatile.Read(ref _lifecycleStateValue);
+        string? detail;
+        DateTimeOffset timestamp;
+        lock (_lifecycleDetailLock)
+        {
+            detail = _lifecycleDetail;
+            timestamp = _lifecycleTimestampUtc;
+        }
+        return new ConnectionSummary(
+            State: state.ToString(),
+            Detail: detail,
+            Timestamp: timestamp
+        );
+    }
+
     // ── DTO ──────────────────────────────────────────────────────────────
+
+    private sealed record DashboardPayload(
+        ConnectionSummary Connection,
+        StationSummary[] Stations
+    );
+
+    private sealed record ConnectionSummary(
+        string State,
+        string? Detail,
+        DateTimeOffset Timestamp
+    );
 
     private sealed record StationSummary(
         int StationId,
@@ -215,6 +262,52 @@ internal sealed class DashboardServer : IAsyncDisposable
             @keyframes pulse {
               0%, 100% { opacity: 1; }
               50%       { opacity: .3; }
+            }
+
+            #connection-banner {
+              margin: 16px 16px 0 16px;
+              padding: 12px 14px;
+              border: 1px solid var(--border);
+              border-radius: 10px;
+              background: #151a2b;
+              display: flex;
+              flex-wrap: wrap;
+              align-items: center;
+              gap: 10px;
+            }
+            .connection-dot {
+              width: 10px;
+              height: 10px;
+              border-radius: 50%;
+              background: #94a3b8;
+              box-shadow: 0 0 0 3px rgba(148, 163, 184, .15);
+            }
+            .connection-dot.running {
+              background: var(--green);
+              box-shadow: 0 0 0 3px rgba(34, 197, 94, .18);
+            }
+            .connection-dot.transitioning {
+              background: var(--yellow);
+              box-shadow: 0 0 0 3px rgba(234, 179, 8, .16);
+            }
+            .connection-dot.error {
+              background: var(--red);
+              box-shadow: 0 0 0 3px rgba(239, 68, 68, .16);
+            }
+            #connection-state {
+              font-size: .88rem;
+              font-weight: 700;
+              color: #fff;
+            }
+            #connection-detail {
+              font-size: .82rem;
+              color: var(--muted);
+              min-width: 220px;
+              flex: 1 1 220px;
+            }
+            #connection-time {
+              font-size: .75rem;
+              color: var(--muted);
             }
 
             main {
@@ -351,6 +444,13 @@ internal sealed class DashboardServer : IAsyncDisposable
             </div>
           </header>
 
+          <div id="connection-banner">
+            <div id="connection-dot" class="connection-dot"></div>
+            <span id="connection-state">Idle</span>
+            <span id="connection-detail"></span>
+            <span id="connection-time"></span>
+          </div>
+
           <div id="error-banner"></div>
           <main id="grid"></main>
 
@@ -446,12 +546,38 @@ internal sealed class DashboardServer : IAsyncDisposable
               </div>`;
             }
 
+            function getConnectionCssClass(state) {
+              switch (state) {
+                case 'Running': return 'running';
+                case 'Starting':
+                case 'Stopping': return 'transitioning';
+                case 'Error': return 'error';
+                default: return '';
+              }
+            }
+
+            function renderConnection(connection) {
+              const conn = connection || { state: 'Idle', detail: '', timestamp: null };
+              const state = conn.state ?? conn.State ?? 'Idle';
+              const detail = conn.detail ?? conn.Detail ?? '';
+              const timestamp = conn.timestamp ?? conn.Timestamp ?? null;
+              const dot = document.getElementById('connection-dot');
+              dot.className = `connection-dot ${getConnectionCssClass(state)}`.trim();
+              document.getElementById('connection-state').textContent = state;
+              document.getElementById('connection-detail').textContent = detail;
+              document.getElementById('connection-time').textContent =
+                timestamp ? ('As of ' + new Date(timestamp).toLocaleTimeString()) : '';
+            }
+
             async function refresh() {
               const errorBanner = document.getElementById('error-banner');
               try {
                 const res = await fetch('/api/stations');
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const stations = await res.json();
+                const payload = await res.json();
+                const stations = payload.stations || [];
+
+                renderConnection(payload.connection);
 
                 document.getElementById('grid').innerHTML =
                   stations.map(renderCard).join('');
