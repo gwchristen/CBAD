@@ -1,7 +1,5 @@
 using CBAD.Diagnostics;
 using CBAD.Models;
-using CBAD.Parsing;
-using ScottPlot.WinForms;
 
 namespace CBAD.UI;
 
@@ -9,58 +7,27 @@ internal sealed class StationDetailTab : UserControl
 {
     private readonly int _station;
 
-    // ── Diagnostic inference ──────────────────────────────────────────────
     private readonly DiagnosticAnalyzer _diagnosticAnalyzer = new();
     private ProfileManager? _profileManager;
 
-    // ── Essentials section labels ───────────────────────────────────────
-    private readonly Label _lblStationBig  = new() { AutoSize = true };
-    private readonly Label _lblBatteryId   = new() { AutoSize = true };
-    private readonly Label _lblStatusDot   = new() { AutoSize = false, Width = 14, Height = 14, Margin = new Padding(0, 3, 8, 0) };
-    private readonly Label _lblStatus      = new() { AutoSize = true };
-    private readonly Label _lblVoltageIcon = new() { AutoSize = true };
-    private readonly Label _lblCurrentIcon = new() { AutoSize = true };
-    private readonly Label _lblHealthIcon  = new() { AutoSize = true };
-    private readonly Label _lblTempIcon    = new() { AutoSize = true };
-    private readonly Label _lblVoltage     = new() { AutoSize = true };
-    private readonly Label _lblCurrent     = new() { AutoSize = true };
-    private readonly Label _lblHealth      = new() { AutoSize = true };
-    private readonly Label _lblTemp        = new() { AutoSize = true };
-    private readonly Label _lblLastUpdate  = new() { AutoSize = true };
-    private readonly Label _lblRuntime     = new() { AutoSize = true };
-
-    // ── Advanced detail labels ──────────────────────────────────────────
-    private readonly Label _lblStation       = new() { AutoSize = true };
-    private readonly Label _lblLastUpdateAdv = new() { AutoSize = true };
-    private readonly Label _lblDate          = new() { AutoSize = true };
-    private readonly Label _lblTime          = new() { AutoSize = true };
-    private readonly Label _lblEventCode     = new() { AutoSize = true };
-    private readonly Label _lblBatteryType   = new() { AutoSize = true };
-    private readonly Label _lblHealthCurrent = new() { AutoSize = true };
-    private readonly Label _lblHealthPrev    = new() { AutoSize = true };
-    private readonly Label _lblTargetCap     = new() { AutoSize = true };
-    private readonly Label _lblResistance    = new() { AutoSize = true };
-
-    // ── Test Record Metadata fields ──────────────────────────────────────
-    private readonly TextBox  _txtWorkOrder      = new() { PlaceholderText = "Work order / ticket #" };
-    private readonly TextBox  _txtBatterySerial  = new() { PlaceholderText = "Battery serial / asset tag" };
-    private readonly CheckBox _chkVisualPass     = new() { Text = "Passed Visual Inspection", AutoSize = true };
-    private readonly TextBox  _txtNotes          = new() { Multiline = true, Height = 56, ScrollBars = ScrollBars.Vertical, PlaceholderText = "Notes / remarks…" };
-    private readonly Button   _btnCommitRecord   = new() { Text = "📋  Commit Record / Generate Report", AutoSize = true, Height = 30 };
+    private readonly TextBox _txtWorkOrder = new() { PlaceholderText = "Work order / ticket #" };
+    private readonly TextBox _txtBatterySerial = new() { PlaceholderText = "Battery serial / asset tag" };
+    private readonly CheckBox _chkVisualPass = new() { Text = "Passed Visual Inspection", AutoSize = true };
+    private readonly TextBox _txtNotes = new() { Multiline = true, Height = 56, ScrollBars = ScrollBars.Vertical, PlaceholderText = "Notes / remarks…" };
+    private readonly Button _btnCommitRecord = new() { Text = "📋  Commit Record / Generate Report", AutoSize = true, Height = 30 };
     private GroupBox? _recordMetaGroup;
     private TableLayoutPanel? _recordMetaTable;
 
-    // ── Diagnostic Explanation ────────────────────────────────────────────
     private readonly TextBox _txtDiagExplanation = new()
     {
-        Multiline   = true,
-        ReadOnly    = true,
-        Height      = 120,
-        ScrollBars  = ScrollBars.Vertical,
-        BackColor   = System.Drawing.Color.FromArgb(240, 244, 250),
-        ForeColor   = System.Drawing.Color.FromArgb(30, 46, 78),
-        Font        = new System.Drawing.Font("Segoe UI", 8.5f),
-        Text        = "No diagnostic data — run a test with an active profile.",
+        Multiline = true,
+        ReadOnly = true,
+        Height = 120,
+        ScrollBars = ScrollBars.Vertical,
+        BackColor = System.Drawing.Color.FromArgb(240, 244, 250),
+        ForeColor = System.Drawing.Color.FromArgb(30, 46, 78),
+        Font = new System.Drawing.Font("Segoe UI", 8.5f),
+        Text = "No diagnostic data — run a test with an active profile.",
     };
     private GroupBox? _diagGroup;
 
@@ -100,11 +67,12 @@ internal sealed class StationDetailTab : UserControl
     private readonly TextBox  _txtFilter      = new() { Width = 160, PlaceholderText = "Filter lines…", Margin = new Padding(4, 2, 4, 2) };
     private bool _streamPaused;
 
+    private bool _isDark;
     private StationState? _lastState;
 
     public StationDetailTab(int station, ProfileManager? profileManager = null)
     {
-        _station        = station;
+        _station = station;
         _profileManager = profileManager;
         Dock = DockStyle.Fill;
 
@@ -125,9 +93,6 @@ internal sealed class StationDetailTab : UserControl
         WireClearStation();
         WireChartMouse();
 
-        // ── Left column: essentials (top, auto-sized) | chart+stream (fill) ──────────────────
-        // TableLayoutPanel avoids the WinForms SplitContainer lifecycle problem where
-        // SplitterDistance is silently clamped before the control has actual dimensions.
         var mainCol = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -135,36 +100,34 @@ internal sealed class StationDetailTab : UserControl
             RowCount = 2,
         };
         mainCol.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-        mainCol.RowStyles.Add(new RowStyle(SizeType.AutoSize));       // essentials: auto-height
-        mainCol.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));  // chart/stream: fills rest
-        mainCol.Controls.Add(BuildEssentialsPanel(), 0, 0);
+        mainCol.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        mainCol.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+        mainCol.Controls.Add(_essentials, 0, 0);
         mainCol.Controls.Add(BuildChartStreamTabs(), 0, 1);
 
-        // ── Right column: diagnostic explanation (top) | record metadata (fill) ───────────
         var rightCol = new TableLayoutPanel
         {
-            Dock        = DockStyle.Fill,
+            Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount    = 2,
+            RowCount = 2,
         };
         rightCol.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-        rightCol.RowStyles.Add(new RowStyle(SizeType.AutoSize));       // diagnostic: auto-height
-        rightCol.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));  // metadata: fills rest
+        rightCol.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        rightCol.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
         rightCol.Controls.Add(BuildDiagnosticGroup(), 0, 0);
         rightCol.Controls.Add(BuildRecordMetadataGroup(), 0, 1);
 
-        // ── Outer layout: main area (left, fill) | right column (fixed 260px) ─────────────
         var outer = new TableLayoutPanel
         {
-            Dock        = DockStyle.Fill,
+            Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount    = 1,
+            RowCount = 1,
         };
-        outer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));   // main: fills rest
-        outer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 260f));  // right: fixed
+        outer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        outer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 260f));
         outer.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-        outer.Controls.Add(mainCol,   0, 0);
-        outer.Controls.Add(rightCol,  1, 0);
+        outer.Controls.Add(mainCol, 0, 0);
+        outer.Controls.Add(rightCol, 1, 0);
 
         Controls.Add(outer);
     }
@@ -388,19 +351,19 @@ internal sealed class StationDetailTab : UserControl
     {
         var group = new GroupBox
         {
-            Text    = "Test Record Metadata",
-            Dock    = DockStyle.Fill,
+            Text = "Test Record Metadata",
+            Dock = DockStyle.Fill,
             Padding = new Padding(8, 20, 8, 8),
-            Margin  = new Padding(0),
+            Margin = new Padding(0),
         };
 
         var table = new TableLayoutPanel
         {
-            ColumnCount  = 1,
-            AutoSize     = true,
+            ColumnCount = 1,
+            AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Dock         = DockStyle.Top,
-            Padding      = new Padding(2),
+            Dock = DockStyle.Top,
+            Padding = new Padding(2),
         };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
 
@@ -408,12 +371,12 @@ internal sealed class StationDetailTab : UserControl
         {
             var lbl = new Label
             {
-                Text     = labelText,
+                Text = labelText,
                 AutoSize = true,
-                Font     = new System.Drawing.Font(SystemFonts.DefaultFont, System.Drawing.FontStyle.Bold),
-                Margin   = new Padding(0, 4, 0, 2),
+                Font = new System.Drawing.Font(SystemFonts.DefaultFont, System.Drawing.FontStyle.Bold),
+                Margin = new Padding(0, 4, 0, 2),
             };
-            ctrl.Dock   = DockStyle.Top;
+            ctrl.Dock = DockStyle.Top;
             ctrl.Margin = new Padding(0, 0, 0, 4);
             table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             table.Controls.Add(lbl);
@@ -424,16 +387,14 @@ internal sealed class StationDetailTab : UserControl
         AddField("Work Order / Ticket #:", _txtWorkOrder);
         AddField("Battery Serial / Asset Tag:", _txtBatterySerial);
 
-        // Visual inspection checkbox (no label above it, just the checkbox itself)
         _chkVisualPass.Margin = new Padding(0, 6, 0, 4);
         table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         table.Controls.Add(_chkVisualPass);
 
         AddField("Notes / Remarks:", _txtNotes);
 
-        // Commit button
-        _btnCommitRecord.Dock    = DockStyle.Top;
-        _btnCommitRecord.Margin  = new Padding(0, 8, 0, 4);
+        _btnCommitRecord.Dock = DockStyle.Top;
+        _btnCommitRecord.Margin = new Padding(0, 8, 0, 4);
         _btnCommitRecord.FlatStyle = FlatStyle.Flat;
         _btnCommitRecord.BackColor = System.Drawing.Color.FromArgb(30, 100, 180);
         _btnCommitRecord.ForeColor = System.Drawing.Color.White;
@@ -452,20 +413,19 @@ internal sealed class StationDetailTab : UserControl
         return group;
     }
 
-    // ── Diagnostic Explanation group ──────────────────────────────────────
     private GroupBox BuildDiagnosticGroup()
     {
         var group = new GroupBox
         {
-            Text    = "🔬 Diagnostic Explanation",
-            Dock    = DockStyle.Top,
+            Text = "🔬 Diagnostic Explanation",
+            Dock = DockStyle.Top,
             Padding = new Padding(8, 20, 8, 8),
-            Margin  = new Padding(0, 0, 0, 4),
-            AutoSize     = true,
+            Margin = new Padding(0, 0, 0, 4),
+            AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
 
-        _txtDiagExplanation.Dock   = DockStyle.Top;
+        _txtDiagExplanation.Dock = DockStyle.Top;
         _txtDiagExplanation.Margin = new Padding(0);
 
         group.Controls.Add(_txtDiagExplanation);
@@ -486,12 +446,11 @@ internal sealed class StationDetailTab : UserControl
         }
 
         var rec = _lastState.Latest;
-        
+
         string chartBase64 = "";
         try
         {
-            // Capture the chart as a 800x400 PNG
-            byte[] bytes = _formsPlot.Plot.GetImage(800, 400).GetImageBytes();
+            byte[] bytes = _chart.GetChartImageBytes(800, 400);
             chartBase64 = Convert.ToBase64String(bytes);
         }
         catch (Exception ex)
@@ -502,7 +461,7 @@ internal sealed class StationDetailTab : UserControl
         var processCodeStr = rec.ProcessCode?.ToString() ?? "";
         string statusText = !string.IsNullOrEmpty(_lastState.FailureReason)
             ? $"FAIL: {_lastState.FailureReason}"
-            : CadexStatusCodes.Describe(processCodeStr);
+            : CBAD.Parsing.CadexStatusCodes.Describe(processCodeStr);
 
         var data = new CBAD.Reporting.ReportData
         {
@@ -515,7 +474,7 @@ internal sealed class StationDetailTab : UserControl
 
             Date = rec.ReceivedAt.ToString("yyyy-MM-dd HH:mm:ss UTC"),
             FinalStatus = statusText,
-            ProcessCode = string.IsNullOrEmpty(processCodeStr) ? "—" : $"{processCodeStr} ({CadexStatusCodes.Describe(processCodeStr)})",
+            ProcessCode = string.IsNullOrEmpty(processCodeStr) ? "—" : $"{processCodeStr} ({CBAD.Parsing.CadexStatusCodes.Describe(processCodeStr)})",
             TargetCapacity = _lastState.TargetCapacity ?? "—",
             FinalVoltage = rec.VoltageMv.HasValue ? $"{rec.VoltageMv} mV" : "—",
             FinalCurrent = rec.CurrentMa.HasValue ? $"{rec.CurrentMa} mA" : "—",
@@ -524,203 +483,64 @@ internal sealed class StationDetailTab : UserControl
         };
 
         var html = CBAD.Reporting.ReportGenerator.GenerateHtml(data);
-        
+
         using var viewer = new ReportViewerForm(html, $"Report - Station {_station}");
         viewer.ShowDialog(this);
     }
 
-    // ── Chart + Stream tabs ─────────────────────────────────────────────
     private TabControl BuildChartStreamTabs()
     {
         var tabs = new TabControl { Dock = DockStyle.Fill };
 
-        // Chart tab
         var chartTab = new TabPage("Chart");
-        var chartPanel = new Panel { Dock = DockStyle.Fill };
-        chartPanel.Controls.Add(_formsPlot);         // Fill — added first
-        chartPanel.Controls.Add(_lblChartTooltip);   // Bottom — added after
-        chartTab.Controls.Add(chartPanel);
+        chartTab.Controls.Add(_chart);
         tabs.TabPages.Add(chartTab);
 
-        // Stream tab
         var streamTab = new TabPage("Raw Stream");
-        var streamPanel = new Panel { Dock = DockStyle.Fill };
-        streamPanel.Controls.Add(_txtStream);                   // Fill — added first
-        streamPanel.Controls.Add(_btnExport);                   // Bottom
-        streamPanel.Controls.Add(BuildStreamToolbar());         // Top — added last
-        streamTab.Controls.Add(streamPanel);
+        streamTab.Controls.Add(_stream);
         tabs.TabPages.Add(streamTab);
 
         return tabs;
     }
 
-    private void BuildChart()
+    public void UpdateStation(StationState state)
     {
-        var plot = _formsPlot.Plot;
-
-        // Axis labels
-        plot.Axes.Bottom.Label.Text = "Time (minutes)";
-        plot.Axes.Left.Label.Text   = "Voltage (mV)";
-        plot.Axes.Right.Label.Text  = "Health (%)";
-        plot.Axes.Right.IsVisible   = true;
-
-        // Second right axis for Current (mA) — sits to the right of the Health axis
-        _currentAxis = plot.Axes.AddRightAxis();
-        _currentAxis.Label.Text = "Current (mA)";
-
-        // Grid style
-        plot.Grid.MajorLineColor = ScottPlot.Colors.LightGray.WithAlpha(0.5f);
-
-        // Background
-        plot.FigureBackground.Color = ScottPlot.Colors.WhiteSmoke;
-        plot.DataBackground.Color   = ScottPlot.Colors.White;
-
-        // Show legend in the upper-left so it stays out of the way as data grows rightward
-        plot.ShowLegend(ScottPlot.Alignment.UpperLeft);
+        _lastState = state;
+        _essentials.UpdateStation(state, _isDark);
+        _chart.UpdateChart(state);
+        _stream.UpdateStream(state);
+        RunDiagnosticAnalysis(state);
     }
 
-    private void WireExport()
-    {
-        _btnExport.Click += (_, __) =>
-        {
-            if (_lastState is null || _lastState.RawLines.Count == 0)
-            {
-                MessageBox.Show("No data to export.", "Export", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-            using var dlg = new SaveFileDialog
-            {
-                Title = "Export Raw Station Data",
-                Filter = "CSV files (*.csv)|*.csv|Text files (*.txt)|*.txt|All files (*.*)|*.*",
-                FileName = $"station{_station}_export_{DateTime.Now:yyyyMMdd_HHmmss}.csv",
-            };
-            if (dlg.ShowDialog() != DialogResult.OK) return;
-            File.WriteAllLines(dlg.FileName, _lastState.RawLines);
-            MessageBox.Show(
-                $"Exported {_lastState.RawLines.Count} lines to:{Environment.NewLine}{dlg.FileName}",
-                "Export Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        };
-    }
-
-    private void WireClearStation()
-    {
-        _btnClearStation.Click += (_, __) =>
-        {
-            var confirm = MessageBox.Show(
-                $"Clear all captured data for Station {_station}?{Environment.NewLine}This cannot be undone.",
-                "Clear Station Data",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Warning);
-
-            if (confirm != DialogResult.Yes) return;
-
-            ClearStation();
-        };
-    }
-
-    /// <summary>
-    /// Clears all captured data and resets the UI for this station.
-    /// Can be called programmatically (e.g. from the "Clear All" toolbar button).
-    /// </summary>
     public void ClearStation()
     {
-        // Clear the shared state buffers.  Both the button click and
-        // ProcessLine are dispatched on the UI thread (via BeginInvoke in the
-        // serial capture service), so no additional locking is required.
         if (_lastState is not null)
         {
             _lastState.History.Clear();
             _lastState.RawLines.Clear();
-            _lastState.Latest             = null;
-            _lastState.TargetCapacity     = null;
-            _lastState.FailureReason      = null;
+            _lastState.Latest = null;
+            _lastState.TargetCapacity = null;
+            _lastState.FailureReason = null;
             _lastState.LastActiveEventCode = null;
-            _lastState.LastActiveRecord    = null;
+            _lastState.LastActiveRecord = null;
         }
         _lastState = null;
 
-        // Reset the chart to a clean baseline.  plot.Clear() removes all
-        // plotted series (including the crosshair plottable); the axis/grid/
-        // background settings from BuildChart() remain in place and do not
-        // need to be reapplied.
-        var plot = _formsPlot.Plot;
-        plot.Clear();
-        _crosshair = null;
+        _chart.ClearChart();
+        _stream.ClearStream();
+        _essentials.Reset(_isDark);
 
-        if (_formsPlot.Width > 0 && _formsPlot.Height > 0)
-        {
-            _formsPlot.Refresh();
-        }
-
-        // Clear the raw stream display.
-        _txtStream.Clear();
-
-        // Hide the chart tooltip.
-        _lblChartTooltip.Text    = string.Empty;
-        _lblChartTooltip.Visible = false;
-
-        // Reset all UI labels to their default empty states.
-        _lblBatteryId.Text   = "Battery: —";
-        _lblStatusDot.BackColor = System.Drawing.Color.LightGray; // matches initial value in BuildEssentialsPanel
-        _lblStatus.Text      = "No data";
-        _lblStatus.ForeColor = AppTheme.MutedFg(_isDark);
-        _lblStatus.Font      = new System.Drawing.Font(
-            _lblStatus.Font.FontFamily,
-            _lblStatus.Font.Size,
-            System.Drawing.FontStyle.Regular);
-        _lblVoltage.Text     = "Voltage: —";
-        _lblCurrent.Text     = "Current: —";
-        _lblHealth.Text      = "Health: —";
-        _lblTemp.Text        = "Temp: —";
-        _lblLastUpdate.Text  = "No data yet — connect and start capture";
-
-        // Advanced section labels
-        _lblStation.Text        = "—";
-        _lblLastUpdateAdv.Text  = "—";
-        _lblDate.Text           = "—";
-        _lblTime.Text           = "—";
-        _lblEventCode.Text      = "—";
-        _lblBatteryType.Text    = "—";
-        _lblHealthCurrent.Text  = "—";
-        _lblHealthPrev.Text     = "—";
-        _lblTargetCap.Text      = "—";
-        _lblResistance.Text     = "—";
-
-        // Diagnostic explanation
-        _txtDiagExplanation.Text      = "No diagnostic data — run a test with an active profile.";
+        _txtDiagExplanation.Text = "No diagnostic data — run a test with an active profile.";
         _txtDiagExplanation.ForeColor = AppTheme.MutedFg(_isDark);
     }
 
-    private void WireChartMouse()
+    private void OnClearRequested(object? sender, EventArgs e)
     {
-        _formsPlot.MouseMove  += OnFormsPlotMouseMove;
-        _formsPlot.MouseLeave += (_, __) =>
-        {
-            if (_crosshair is not null)
-            {
-                _crosshair.IsVisible = false;
-                if (_formsPlot.Width > 0 && _formsPlot.Height > 0)
-                {
-                    _formsPlot.Refresh();
-                }
-            }
-            _lblChartTooltip.Text    = string.Empty;
-            _lblChartTooltip.Visible = false;
-        };
-    }
-
-    private void OnFormsPlotMouseMove(object? sender, MouseEventArgs e)
-    {
-        if (_crosshair is null || _lastState is null) return;
-
-        var chartable = _lastState.History
-            .Where(r => r.EventCode == 250 && r.VoltageMv.HasValue)
-            .ToList();
-
-        if (chartable.Count == 0) return;
-
-        var coords = _formsPlot.Plot.GetCoordinates(e.X, e.Y);
-        double mouseX = coords.X;
+        var confirm = MessageBox.Show(
+            $"Clear all captured data for Station {_station}?{Environment.NewLine}This cannot be undone.",
+            "Clear Station Data",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning);
 
         // Find the nearest plotted data point to the mouse X position using index.
         CadexRecord? nearest = null;
@@ -1099,27 +919,22 @@ internal sealed class StationDetailTab : UserControl
         if (!_streamPaused)
             RefreshStream();
 
-        // ── Diagnostic analysis ───────────────────────────────────────────
-        RunDiagnosticAnalysis(state);
+        ClearStation();
     }
 
-    /// <summary>
-    /// Runs the Stage 3/4 diagnostic inference against the active profile (if any)
-    /// and updates the Diagnostic Explanation TextBox with the result.
-    /// </summary>
     private void RunDiagnosticAnalysis(StationState state)
     {
         var profile = _profileManager?.ActiveProfile;
         if (profile is null)
         {
-            _txtDiagExplanation.Text      = "No active battery profile — select a profile in Settings › Battery Profiles to enable diagnostics.";
+            _txtDiagExplanation.Text = "No active battery profile — select a profile in Settings › Battery Profiles to enable diagnostics.";
             _txtDiagExplanation.ForeColor = AppTheme.MutedFg(_isDark);
             return;
         }
 
         if (state.Latest is null)
         {
-            _txtDiagExplanation.Text      = "No diagnostic data — run a test with an active profile.";
+            _txtDiagExplanation.Text = "No diagnostic data — run a test with an active profile.";
             _txtDiagExplanation.ForeColor = AppTheme.MutedFg(_isDark);
             return;
         }
@@ -1129,8 +944,6 @@ internal sealed class StationDetailTab : UserControl
             var report = _diagnosticAnalyzer.Analyze(state, profile);
 
             _txtDiagExplanation.Text = report.TechnicianExplanation;
-
-            // Colour-code the explanation: green for pass, red/amber for fail.
             _txtDiagExplanation.ForeColor = report.MeetsAcceptanceCriteria
                 ? System.Drawing.Color.FromArgb(0, 130, 60)
                 : (report.TechnicianExplanation.StartsWith("CAUTION", StringComparison.OrdinalIgnoreCase)
@@ -1139,66 +952,24 @@ internal sealed class StationDetailTab : UserControl
         }
         catch (Exception ex)
         {
-            _txtDiagExplanation.Text      = $"Diagnostic analysis error: {ex.Message}";
+            _txtDiagExplanation.Text = $"Diagnostic analysis error: {ex.Message}";
             _txtDiagExplanation.ForeColor = AppTheme.MutedFg(_isDark);
             AppLog.Warn($"DiagnosticAnalyzer error on station {_station}: {ex.Message}");
         }
     }
 
-    // ── Theming ─────────────────────────────────────────────────────────
+    private static System.Drawing.Color GetLineColor(string line) =>
+        StationStreamPanel.GetLineColor(line);
+
     public void ApplyTheme(bool isDark)
     {
         _isDark = isDark;
 
         BackColor = AppTheme.PanelBg(isDark);
+        _essentials.ApplyTheme(isDark);
+        _chart.ApplyTheme(isDark);
+        _stream.ApplyTheme(isDark);
 
-        if (_essentialsPanel != null)
-            _essentialsPanel.BackColor = AppTheme.PanelBg(isDark);
-
-        // Essentials section
-        _lblStationBig.ForeColor = AppTheme.HeadingFg(isDark);
-        _lblBatteryId.ForeColor  = AppTheme.MutedFg(isDark);
-        _lblStatus.ForeColor     = AppTheme.MutedFg(isDark);
-        _lblVoltage.ForeColor    = AppTheme.LabelFg(isDark);
-        _lblCurrent.ForeColor    = AppTheme.LabelFg(isDark);
-        _lblHealth.ForeColor     = AppTheme.LabelFg(isDark);
-        _lblTemp.ForeColor       = AppTheme.LabelFg(isDark);
-        _lblLastUpdate.ForeColor = AppTheme.MutedFg(isDark);
-        _lblRuntime.ForeColor    = AppTheme.MutedFg(isDark);
-
-        // Advanced detail value labels
-        _lblStation.ForeColor       = AppTheme.LabelFg(isDark);
-        _lblLastUpdateAdv.ForeColor = AppTheme.LabelFg(isDark);
-        _lblDate.ForeColor          = AppTheme.LabelFg(isDark);
-        _lblTime.ForeColor          = AppTheme.LabelFg(isDark);
-        _lblEventCode.ForeColor     = AppTheme.LabelFg(isDark);
-        _lblBatteryType.ForeColor   = AppTheme.LabelFg(isDark);
-        _lblHealthCurrent.ForeColor = AppTheme.LabelFg(isDark);
-        _lblHealthPrev.ForeColor    = AppTheme.LabelFg(isDark);
-        _lblTargetCap.ForeColor     = AppTheme.LabelFg(isDark);
-        _lblResistance.ForeColor    = AppTheme.LabelFg(isDark);
-
-        // Chart tooltip label
-        _lblChartTooltip.ForeColor = AppTheme.MutedFg(isDark);
-        _lblChartTooltip.BackColor = AppTheme.PanelBg(isDark);
-
-        // GroupBox border/background and its key-label children
-        if (_advGroup != null)
-        {
-            _advGroup.ForeColor = AppTheme.LabelFg(isDark);
-            _advGroup.BackColor = AppTheme.PanelBg(isDark);
-            _advGroup.Invalidate();
-        }
-
-        if (_advTable != null)
-        {
-            _advTable.BackColor = AppTheme.PanelBg(isDark);
-            foreach (Control c in _advTable.Controls)
-                if (c is Label lbl)
-                    lbl.ForeColor = AppTheme.LabelFg(isDark);
-        }
-
-        // Record metadata group
         if (_recordMetaGroup != null)
         {
             _recordMetaGroup.ForeColor = AppTheme.LabelFg(isDark);
@@ -1239,7 +1010,6 @@ internal sealed class StationDetailTab : UserControl
             }
         }
 
-        // Diagnostic explanation group
         if (_diagGroup != null)
         {
             _diagGroup.ForeColor = AppTheme.LabelFg(isDark);
