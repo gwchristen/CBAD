@@ -105,4 +105,20 @@ public class SettingsManagerTests : IDisposable
 
         Assert.Null(ex);
     }
+
+    [Fact]
+    public void Save_ThenLoad_RoundTripsNullPort()
+    {
+        var expected = new AppSettings
+        {
+            Port = null,
+            OutDir = Path.Combine(_tempDir, "output"),
+        };
+
+        SettingsManager.Save(expected, _settingsPath);
+        var actual = SettingsManager.Load(_settingsPath);
+
+        Assert.Null(actual.Port);
+        Assert.Equal(expected.OutDir, actual.OutDir);
+    }
 }
