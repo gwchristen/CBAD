@@ -89,6 +89,7 @@ internal sealed class StationDetailTab : UserControl
     };
 
     // Stream
+    private const int NormalTelemetryEventCode = 250;
     private readonly RichTextBox _txtStream;
     private readonly Button _btnExport       = new() { Text = "Export Raw Data…", Dock = DockStyle.Bottom, Height = 30 };
     private readonly Button _btnClearStation = new() { Text = "🗑  Clear Data", AutoSize = true, Margin = new Padding(16, 0, 0, 0) };
@@ -863,11 +864,7 @@ internal sealed class StationDetailTab : UserControl
 
     private static System.Drawing.Color GetLineColor(string line)
     {
-        if (line.Contains("PARSE FAIL", StringComparison.OrdinalIgnoreCase)
-            || line.Contains("PARSE_FAILED", StringComparison.OrdinalIgnoreCase)
-            || line.Contains("PARSE-FAIL", StringComparison.OrdinalIgnoreCase)
-            || line.Contains("PARSE FAILED", StringComparison.OrdinalIgnoreCase)
-            || line.Contains("Parse failed:", StringComparison.OrdinalIgnoreCase))
+        if (ContainsParseFailureMarker(line))
         {
             return System.Drawing.Color.FromArgb(255, 100, 100);
         }
@@ -882,10 +879,22 @@ internal sealed class StationDetailTab : UserControl
             return System.Drawing.Color.FromArgb(100, 220, 255);
         if (CadexEventParser.IsFaultIndicatorCode(eventCode))
             return System.Drawing.Color.FromArgb(255, 200, 80);
-        if (eventCode == 250)
+        if (eventCode == NormalTelemetryEventCode)
             return System.Drawing.Color.FromArgb(130, 210, 130);
 
         return System.Drawing.Color.FromArgb(200, 200, 200);
+    }
+
+    private static bool ContainsParseFailureMarker(string line)
+    {
+        // Parse-failure markers may include separators (PARSE_FAIL, PARSE-FAIL, Parse failed:)
+        // so normalize common delimiters before checking.
+        var normalizedLine = line
+            .Replace('_', ' ')
+            .Replace('-', ' ')
+            .Replace(':', ' ');
+
+        return normalizedLine.Contains("PARSE FAIL", StringComparison.OrdinalIgnoreCase);
     }
 
     private static void AddPair(TableLayoutPanel t, string lbl1, Control val1, string lbl2, Control val2)

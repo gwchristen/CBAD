@@ -27,7 +27,7 @@ public class StationDetailTabStreamColorTests
     {
         var method = typeof(StationDetailTab).GetMethod("GetLineColor", BindingFlags.NonPublic | BindingFlags.Static);
         Assert.NotNull(method);
-        var result = method!.Invoke(null, [line]);
+        var result = method!.Invoke(null, new object[] { line });
         Assert.IsType<Color>(result);
         return (Color)result;
     }
