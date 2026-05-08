@@ -89,7 +89,7 @@ internal sealed class StationDetailTab : UserControl
     };
 
     // Stream
-    private readonly TextBox _txtStream;
+    private readonly RichTextBox _txtStream;
     private readonly Button _btnExport       = new() { Text = "Export Raw Data…", Dock = DockStyle.Bottom, Height = 30 };
     private readonly Button _btnClearStation = new() { Text = "🗑  Clear Data", AutoSize = true, Margin = new Padding(16, 0, 0, 0) };
 
@@ -107,12 +107,12 @@ internal sealed class StationDetailTab : UserControl
         _profileManager = profileManager;
         Dock = DockStyle.Fill;
 
-        _txtStream = new TextBox
+        _txtStream = new RichTextBox
         {
             Multiline = true,
             ReadOnly = true,
             WordWrap = false,
-            ScrollBars = ScrollBars.Both,
+            ScrollBars = RichTextBoxScrollBars.Both,
             Dock = DockStyle.Fill,
             Font = new System.Drawing.Font("Consolas", 9),
             BackColor = System.Drawing.Color.FromArgb(18, 24, 36),
@@ -843,13 +843,49 @@ internal sealed class StationDetailTab : UserControl
         if (!string.IsNullOrEmpty(filter))
             lines = lines.Where(l => l.Contains(filter, StringComparison.OrdinalIgnoreCase));
 
-        _txtStream.Text = string.Join(Environment.NewLine, lines.TakeLast(200));
+        var filteredLines = lines.TakeLast(200);
+
+        _txtStream.SuspendLayout();
+        _txtStream.Clear();
+        foreach (var line in filteredLines)
+        {
+            _txtStream.SelectionColor = GetLineColor(line);
+            _txtStream.AppendText(line + Environment.NewLine);
+        }
+        _txtStream.ResumeLayout();
 
         if (_chkAutoScroll.Checked)
         {
             _txtStream.SelectionStart = _txtStream.TextLength;
             _txtStream.ScrollToCaret();
         }
+    }
+
+    private static System.Drawing.Color GetLineColor(string line)
+    {
+        if (line.Contains("PARSE FAIL", StringComparison.OrdinalIgnoreCase)
+            || line.Contains("PARSE_FAILED", StringComparison.OrdinalIgnoreCase)
+            || line.Contains("PARSE-FAIL", StringComparison.OrdinalIgnoreCase)
+            || line.Contains("PARSE FAILED", StringComparison.OrdinalIgnoreCase)
+            || line.Contains("Parse failed:", StringComparison.OrdinalIgnoreCase))
+        {
+            return System.Drawing.Color.FromArgb(255, 100, 100);
+        }
+
+        var fields = line.Split(',');
+        if (fields.Length <= 2 || !int.TryParse(fields[2].Trim(), out var eventCode))
+            return System.Drawing.Color.FromArgb(255, 100, 100);
+
+        if (CadexEventParser.IsFailureCode(eventCode))
+            return System.Drawing.Color.FromArgb(255, 80, 80);
+        if (CadexEventParser.IsSessionStartCode(eventCode))
+            return System.Drawing.Color.FromArgb(100, 220, 255);
+        if (CadexEventParser.IsFaultIndicatorCode(eventCode))
+            return System.Drawing.Color.FromArgb(255, 200, 80);
+        if (eventCode == 250)
+            return System.Drawing.Color.FromArgb(130, 210, 130);
+
+        return System.Drawing.Color.FromArgb(200, 200, 200);
     }
 
     private static void AddPair(TableLayoutPanel t, string lbl1, Control val1, string lbl2, Control val2)
