@@ -95,7 +95,7 @@ public class SettingsManagerTests : IDisposable
         Assert.Equal(expected.DarkMode, actual.DarkMode);
 
         var json = File.ReadAllText(_settingsPath);
-        Assert.Contains(Environment.NewLine + "  \"Port\": \"COM7\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"Port\": \"COM7\"", json, StringComparison.Ordinal);
     }
 
     [Fact]

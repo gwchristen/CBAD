@@ -119,6 +119,8 @@ internal class MainForm : Form
 
         if (startupDefaults is not null)
         {
+            // Explicit command-line startup defaults win over persisted settings
+            // so scripted launches can override the last interactive session.
             ApplyStartupDefaults(startupDefaults);
             RefreshQuickPorts();
         }
