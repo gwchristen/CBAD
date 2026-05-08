@@ -611,6 +611,7 @@ internal class MainForm : Form
         _lblStatusDetail.ForeColor = state == CaptureLifecycleState.Error
             ? Color.FromArgb(255, 120, 120)
             : Color.FromArgb(180, 220, 255);
+        _dashboardServer.SetLifecycleState(state, detail);
 
         // Update status strip (bottom bar) with a friendly connection status
         if (_statusStripLabel is not null)
