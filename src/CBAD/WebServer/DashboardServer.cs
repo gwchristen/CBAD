@@ -546,7 +546,7 @@ internal sealed class DashboardServer : IAsyncDisposable
               </div>`;
             }
 
-            function connectionClass(state) {
+            function getConnectionCssClass(state) {
               switch (state) {
                 case 'Running': return 'running';
                 case 'Starting':
@@ -557,13 +557,13 @@ internal sealed class DashboardServer : IAsyncDisposable
             }
 
             function renderConnection(connection) {
-              const c = connection || { state: 'Idle', detail: '', timestamp: null };
+              const conn = connection || { state: 'Idle', detail: '', timestamp: null };
               const dot = document.getElementById('connection-dot');
-              dot.className = `connection-dot ${connectionClass(c.state)}`.trim();
-              document.getElementById('connection-state').textContent = c.state || 'Idle';
-              document.getElementById('connection-detail').textContent = c.detail || '';
+              dot.className = `connection-dot ${getConnectionCssClass(conn.state)}`.trim();
+              document.getElementById('connection-state').textContent = conn.state || 'Idle';
+              document.getElementById('connection-detail').textContent = conn.detail || '';
               document.getElementById('connection-time').textContent =
-                c.timestamp ? ('As of ' + new Date(c.timestamp).toLocaleTimeString()) : '';
+                conn.timestamp ? ('As of ' + new Date(conn.timestamp).toLocaleTimeString()) : '';
             }
 
             async function refresh() {
