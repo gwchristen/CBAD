@@ -83,7 +83,7 @@ internal class MainForm : Form
         BuildUi();
 
         var settings = SettingsManager.Load();
-        _currentOptions = ToOptions(settings);
+        _currentOptions = ToOptions(settings, _currentOptions);
         RefreshQuickPorts();
         if (settings.DarkMode)
             ApplyTheme(true);
@@ -684,10 +684,8 @@ internal class MainForm : Form
             DarkMode         = isDark,
         };
 
-    private AppOptions ToOptions(AppSettings settings)
+    private static AppOptions ToOptions(AppSettings settings, AppOptions defaults)
     {
-        var defaults = _currentOptions;
-
         return new AppOptions
         {
             Port = string.IsNullOrWhiteSpace(settings.Port) ? defaults.Port : settings.Port,
