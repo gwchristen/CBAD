@@ -98,7 +98,7 @@ internal sealed class StationStateManager
             if (CadexEventParser.IsFailureCode(record.EventCode))
             {
                 string? reason;
-                if (record.EventCode is 116 or 16)
+                if (record.EventCode is 16)
                 {
                     // Context-dependent failure events: prefer the sticky fault indicator
                     // (if any) over the generic last-active event, because intermediate
@@ -114,9 +114,13 @@ internal sealed class StationStateManager
                         ? CadexEventParser.DetermineFailureReason(faultCode.Value, faultRecord)
                         : null;
                 }
+                else if (record.EventCode is 116)
+                {
+                    reason = "Target Capacity Not Met";
+                }
                 else
                 {
-                    // Self-describing terminal failure events (175/176/177/178/179).
+                    // Self-describing terminal failure events (177/178/179).
                     reason = CadexEventParser.DetermineFailureReason(record.EventCode, record);
                 }
 

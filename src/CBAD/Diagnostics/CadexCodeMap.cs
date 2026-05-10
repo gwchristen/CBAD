@@ -84,9 +84,9 @@ internal static class CadexCodeMap
         AddRange(map, 135, 136, "High Cell Resistance", DiagnosticAxis.Resistance, FailureMode.HighImpedance, forcesFail: true);
         Add(map, 115, "Target Capacity Not Met", DiagnosticAxis.Capacity, FailureMode.DegradedChemistry, forcesFail: true);
         Add(map, 14, "Battery Over Temperature", DiagnosticAxis.Thermal, FailureMode.ThermalRunaway, forcesFail: true);
-        Add(map, 112, "Cell Mismatch", DiagnosticAxis.Stability, FailureMode.VoltageInstability, forcesFail: true);
+        Add(map, 112, "Cell Mismatch", DiagnosticAxis.Stability, FailureMode.None, isAdvisory: true);
         Add(map, 113, "Plateau Timeout", DiagnosticAxis.ChargeAcceptance, FailureMode.ChargeInstability, forcesFail: true);
-        Add(map, 130, "Current Rise at Full Charge", DiagnosticAxis.ChargeAcceptance, FailureMode.ChargeInstability, forcesFail: true);
+        Add(map, 130, "Current Rise at Full Charge", DiagnosticAxis.ChargeAcceptance, FailureMode.None, isAdvisory: true);
         Add(map, 146, "Recondition Timeout", DiagnosticAxis.ChargeAcceptance, FailureMode.ChargeInstability, forcesFail: true);
         Add(map, 154, "Charge Complete Temp Rise", DiagnosticAxis.Thermal, FailureMode.ThermalRunaway, forcesFail: true);
         Add(map, 179, "Unable to Learn Matrix", DiagnosticAxis.ChargeAcceptance, FailureMode.ChargeInstability, forcesFail: true);
@@ -104,6 +104,7 @@ internal static class CadexCodeMap
         AddRange(map, 170, 172, "Configuration / Setup Fault", DiagnosticAxis.SystemCondition, FailureMode.ConfigurationError, invalidatesTest: true);
         AddRange(map, 208, 214, "Configuration / Setup Fault", DiagnosticAxis.SystemCondition, FailureMode.ConfigurationError, invalidatesTest: true);
         Add(map, 177, "Battery Undercharged", DiagnosticAxis.Capacity, FailureMode.None, isAdvisory: true);
+        Add(map, 178, "Battery Overcharged", DiagnosticAxis.Capacity, FailureMode.None, isAdvisory: true);
         Add(map, 1, "No Adapter", DiagnosticAxis.TestValidity, FailureMode.InterruptedTest, invalidatesTest: true);
         Add(map, 10, "No Battery", DiagnosticAxis.TestValidity, FailureMode.InterruptedTest, invalidatesTest: true);
         Add(map, 17, "Battery Removed", DiagnosticAxis.TestValidity, FailureMode.InterruptedTest, invalidatesTest: true);
