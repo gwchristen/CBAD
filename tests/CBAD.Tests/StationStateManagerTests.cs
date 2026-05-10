@@ -225,6 +225,114 @@ public class StationStateManagerTests
     }
 
     [Fact]
+    public void ProcessLine_Code177_Without116_SetsBatteryUnderchargedReason()
+    {
+        var mgr = new StationStateManager();
+
+        mgr.ProcessLine(@"0,1,""          "",""04/27/2026"",""143257"",177,""7\70"",""0""");
+
+        Assert.Equal("Battery Undercharged", mgr.GetState(1).FailureReason);
+    }
+
+    [Fact]
+    public void ProcessLine_Code175_Without116_SetsBatteryUnderchargedReason()
+    {
+        var mgr = new StationStateManager();
+
+        mgr.ProcessLine(@"0,1,""          "",""04/27/2026"",""143257"",175,""7\70"",""0""");
+
+        Assert.Equal("Battery Undercharged", mgr.GetState(1).FailureReason);
+    }
+
+    [Fact]
+    public void ProcessLine_Code176_Without116_SetsBatteryOverchargedReason()
+    {
+        var mgr = new StationStateManager();
+
+        mgr.ProcessLine(@"0,1,""          "",""04/27/2026"",""143257"",176,""7\70"",""0""");
+
+        Assert.Equal("Battery Overcharged", mgr.GetState(1).FailureReason);
+    }
+
+    [Fact]
+    public void ProcessLine_Code178_Without116_SetsBatteryOverchargedReason()
+    {
+        var mgr = new StationStateManager();
+
+        mgr.ProcessLine(@"0,1,""          "",""04/27/2026"",""143257"",178,""7\70"",""0""");
+
+        Assert.Equal("Battery Overcharged", mgr.GetState(1).FailureReason);
+    }
+
+    [Fact]
+    public void ProcessLine_Code179_Without116_SetsFailureReason()
+    {
+        var mgr = new StationStateManager();
+
+        mgr.ProcessLine(@"0,1,""          "",""04/27/2026"",""143257"",179,""7\70"",""0""");
+
+        Assert.False(string.IsNullOrWhiteSpace(mgr.GetState(1).FailureReason));
+    }
+
+    [Fact]
+    public void ProcessLine_Code116_AfterCode142_SetsDischargeTimeoutReason()
+    {
+        var mgr = new StationStateManager();
+        var timeoutLine = @"0,1,""          "",""04/27/2026"",""143257"",142,""7\70"",""90\87""";
+        var failLine    = @"0,1,""          "",""04/27/2026"",""143300"",116,""7\70"",""0""";
+
+        mgr.ProcessLine(timeoutLine);
+        mgr.ProcessLine(failLine);
+
+        Assert.Equal("Discharge Timeout", mgr.GetState(1).FailureReason);
+    }
+
+    [Fact]
+    public void ProcessLine_Code116_AfterCode113_ThenCode19_SetsPlateauTimeoutReason()
+    {
+        var mgr = new StationStateManager();
+        var plateauLine = @"0,1,""          "",""04/27/2026"",""143255"",113,""7\1419\-401\35"",""85\37""";
+        var restLine    = @"0,1,""          "",""04/27/2026"",""143256"",19,""19\1419\0\35"",""85\37""";
+        var failLine    = @"0,1,""          "",""04/27/2026"",""143257"",116,""7\1419\-401\35"",""85\37""";
+
+        mgr.ProcessLine(plateauLine);
+        mgr.ProcessLine(restLine);
+        mgr.ProcessLine(failLine);
+
+        Assert.Equal("Plateau Timeout", mgr.GetState(1).FailureReason);
+    }
+
+    [Fact]
+    public void ProcessLine_Code116_AfterCode146_ThenCode19_SetsReconditionTimeoutReason()
+    {
+        var mgr = new StationStateManager();
+        var reconditionLine = @"0,1,""          "",""04/27/2026"",""143255"",146,""4\1419\-401\35"",""85\37""";
+        var restLine        = @"0,1,""          "",""04/27/2026"",""143256"",19,""19\1419\0\35"",""85\37""";
+        var failLine        = @"0,1,""          "",""04/27/2026"",""143257"",116,""4\1419\-401\35"",""85\37""";
+
+        mgr.ProcessLine(reconditionLine);
+        mgr.ProcessLine(restLine);
+        mgr.ProcessLine(failLine);
+
+        Assert.Equal("Recondition Timeout", mgr.GetState(1).FailureReason);
+    }
+
+    [Fact]
+    public void ProcessLine_Code16_AfterCode14_ThenCode19_SetsBatteryOverTemperatureReason()
+    {
+        var mgr = new StationStateManager();
+        var thermalLine = @"0,1,""          "",""04/27/2026"",""143255"",14,""2\1419\-401\35"",""85\37""";
+        var restLine    = @"0,1,""          "",""04/27/2026"",""143256"",19,""19\1419\0\35"",""85\37""";
+        var failLine    = @"0,1,""          "",""04/27/2026"",""143257"",16,""2\1419\-401\35"",""85\37""";
+
+        mgr.ProcessLine(thermalLine);
+        mgr.ProcessLine(restLine);
+        mgr.ProcessLine(failLine);
+
+        Assert.Equal("Battery Over Temperature", mgr.GetState(1).FailureReason);
+    }
+
+    [Fact]
     public void ProcessLine_SessionStartCode_ClearsFailureReason()
     {
         var mgr = new StationStateManager();
@@ -234,6 +342,30 @@ public class StationStateManagerTests
 
         // A new session start (code 20 = Battery Inserted) should clear it
         mgr.ProcessLine(@"0,1,""          "",""04/27/2026"",""150000"",20,""0\80""");
+        Assert.Null(mgr.GetState(1).FailureReason);
+    }
+
+    [Fact]
+    public void ProcessLine_SessionStartCode11_ClearsFailureReason()
+    {
+        var mgr = new StationStateManager();
+        mgr.ProcessLine(@"0,1,""          "",""04/27/2026"",""143257"",116,""7\70"",""0""");
+        Assert.NotNull(mgr.GetState(1).FailureReason);
+
+        mgr.ProcessLine(@"0,1,""          "",""04/27/2026"",""150000"",11,""0\80""");
+
+        Assert.Null(mgr.GetState(1).FailureReason);
+    }
+
+    [Fact]
+    public void ProcessLine_SessionStartCode201_ClearsFailureReason()
+    {
+        var mgr = new StationStateManager();
+        mgr.ProcessLine(@"0,1,""          "",""04/27/2026"",""143257"",116,""7\70"",""0""");
+        Assert.NotNull(mgr.GetState(1).FailureReason);
+
+        mgr.ProcessLine(@"0,1,""          "",""04/27/2026"",""150000"",201,""0\80""");
+
         Assert.Null(mgr.GetState(1).FailureReason);
     }
 

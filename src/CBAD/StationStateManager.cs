@@ -97,18 +97,28 @@ internal sealed class StationStateManager
         {
             if (CadexEventParser.IsFailureCode(record.EventCode))
             {
-                // Failure event: prefer the sticky fault indicator (if any) over the
-                // generic last-active event, because intermediate status codes such as
-                // code 19 "Resting" can arrive between a fault code and the failure
-                // event and would otherwise erase the true root cause.
-                var faultCode   = state.LastFaultEventCode ?? state.LastActiveEventCode;
-                var faultRecord = state.LastFaultEventCode.HasValue
-                    ? state.LastFaultRecord
-                    : state.LastActiveRecord;
+                string? reason;
+                if (record.EventCode is 116 or 16)
+                {
+                    // Context-dependent failure events: prefer the sticky fault indicator
+                    // (if any) over the generic last-active event, because intermediate
+                    // status codes such as code 19 "Resting" can arrive between a fault
+                    // code and the failure event and would otherwise erase the true root
+                    // cause.
+                    var faultCode   = state.LastFaultEventCode ?? state.LastActiveEventCode;
+                    var faultRecord = state.LastFaultEventCode.HasValue
+                        ? state.LastFaultRecord
+                        : state.LastActiveRecord;
 
-                var reason = faultCode.HasValue
-                    ? CadexEventParser.DetermineFailureReason(faultCode.Value, faultRecord)
-                    : null;
+                    reason = faultCode.HasValue
+                        ? CadexEventParser.DetermineFailureReason(faultCode.Value, faultRecord)
+                        : null;
+                }
+                else
+                {
+                    // Self-describing terminal failure events (175/176/177/178/179).
+                    reason = CadexEventParser.DetermineFailureReason(record.EventCode, record);
+                }
 
                 state.FailureReason = reason ?? "Program Failed";
             }

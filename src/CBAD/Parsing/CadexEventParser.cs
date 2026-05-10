@@ -160,19 +160,9 @@ internal static class CadexEventParser
                 => definition.Message,
 
             // Legacy fallback mappings for historical codes not yet in causal map
-            142 => "Discharge Timeout",
-            146 => "Recondition Timeout",
             33  => "User Programmed Timeout",
-            113 => "Plateau Timeout",
-            112 => "Cell Mismatch",
-            130 => "Current Rise at Full Charge",
-            14  => "Battery Over Temperature",
-            152 or 154 or 156 or 158 => "Temperature Failure",
             175 or 177 => "Battery Undercharged",
             176 or 178 => "Battery Overcharged",
-            208 => "Adapter Not Set Up",
-            209 => "Adapter Data Invalid",
-            210 => "Bad Adapter",
 
             _ => null,
         };
@@ -182,7 +172,7 @@ internal static class CadexEventParser
     /// the battery program and should trigger the failure-reason analysis.
     /// </summary>
     public static bool IsFailureCode(int eventCode) =>
-        eventCode is 116 or 16;
+        eventCode is 116 or 16 or 175 or 176 or 177 or 178 or 179;
 
     /// <summary>
     /// Returns <c>true</c> when the code is classified in the causal registry
