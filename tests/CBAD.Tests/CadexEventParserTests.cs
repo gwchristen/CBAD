@@ -164,9 +164,9 @@ public class CadexEventParserTests
     }
 
     [Fact]
-    public void DetermineFailureReason_Code142_ReturnsCapacityAdvisory()
+    public void DetermineFailureReason_Code142_ReturnsDischargeTimeout()
     {
-        Assert.Equal("Capacity > 250% of rating",
+        Assert.Equal("Discharge Timeout",
             CadexEventParser.DetermineFailureReason(142, null));
     }
 
@@ -210,6 +210,11 @@ public class CadexEventParserTests
     [Theory]
     [InlineData(116, true)]
     [InlineData(16,  true)]
+    [InlineData(175, true)]
+    [InlineData(176, true)]
+    [InlineData(177, true)]
+    [InlineData(178, true)]
+    [InlineData(179, true)]
     [InlineData(115, false)]
     [InlineData(250, false)]
     [InlineData(27,  false)]
@@ -221,10 +226,24 @@ public class CadexEventParserTests
     [Theory]
     [InlineData(129, true)]  // Intermittent battery (forced fail)
     [InlineData(170, true)]  // Configuration fault (invalid test)
-    [InlineData(177, false)] // Advisory undercharged
+    [InlineData(14,  true)]
+    [InlineData(112, true)]
+    [InlineData(113, true)]
+    [InlineData(130, true)]
+    [InlineData(142, true)]
+    [InlineData(146, true)]
+    [InlineData(154, true)]
+    [InlineData(179, true)]
+    [InlineData(177, false)] // Undercharged is terminal but not a precursor indicator
     public void IsFaultIndicatorCode_ReturnsExpected(int code, bool expected)
     {
         Assert.Equal(expected, CadexEventParser.IsFaultIndicatorCode(code));
+    }
+
+    [Fact]
+    public void CadexCodeMap_DefinitionFor116_DoesNotExist()
+    {
+        Assert.False(CadexCodeMap.TryGetDefinition(116, out _));
     }
 
     [Fact]

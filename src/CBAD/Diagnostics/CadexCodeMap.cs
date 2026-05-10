@@ -82,7 +82,14 @@ internal static class CadexCodeMap
         Add(map, 128, "Unable to Clamp Charge Voltage", DiagnosticAxis.ChargeAcceptance, FailureMode.ChargeInstability, forcesFail: true);
         AddRange(map, 123, 127, "Low Voltage", DiagnosticAxis.VoltageBehavior, FailureMode.VoltageInstability, forcesFail: true);
         AddRange(map, 135, 136, "High Cell Resistance", DiagnosticAxis.Resistance, FailureMode.HighImpedance, forcesFail: true);
-        AddRange(map, 115, 116, "Target Capacity Not Met", DiagnosticAxis.Capacity, FailureMode.DegradedChemistry, forcesFail: true);
+        Add(map, 115, "Target Capacity Not Met", DiagnosticAxis.Capacity, FailureMode.DegradedChemistry, forcesFail: true);
+        Add(map, 14, "Battery Over Temperature", DiagnosticAxis.Thermal, FailureMode.ThermalRunaway, forcesFail: true);
+        Add(map, 112, "Cell Mismatch", DiagnosticAxis.Stability, FailureMode.VoltageInstability, forcesFail: true);
+        Add(map, 113, "Plateau Timeout", DiagnosticAxis.ChargeAcceptance, FailureMode.ChargeInstability, forcesFail: true);
+        Add(map, 130, "Current Rise at Full Charge", DiagnosticAxis.ChargeAcceptance, FailureMode.ChargeInstability, forcesFail: true);
+        Add(map, 146, "Recondition Timeout", DiagnosticAxis.ChargeAcceptance, FailureMode.ChargeInstability, forcesFail: true);
+        Add(map, 154, "Charge Complete Temp Rise", DiagnosticAxis.Thermal, FailureMode.ThermalRunaway, forcesFail: true);
+        Add(map, 179, "Unable to Learn Matrix", DiagnosticAxis.ChargeAcceptance, FailureMode.ChargeInstability, forcesFail: true);
         Add(map, 152, "Rapid Heat Rise", DiagnosticAxis.Thermal, FailureMode.ThermalRunaway, forcesFail: true);
         Add(map, 156, "Hot Battery, Low Voltage", DiagnosticAxis.Thermal, FailureMode.ThermalRunaway, forcesFail: true);
         Add(map, 158, "Heat Termination", DiagnosticAxis.Thermal, FailureMode.ThermalRunaway, forcesFail: true);
@@ -103,7 +110,7 @@ internal static class CadexCodeMap
         Add(map, 18, "Process Suspended", DiagnosticAxis.TestValidity, FailureMode.InterruptedTest, invalidatesTest: true);
         Add(map, 188, "Service Interrupted", DiagnosticAxis.TestValidity, FailureMode.InterruptedTest, invalidatesTest: true);
         Add(map, 144, "Charge Timeout", DiagnosticAxis.ChargeAcceptance, FailureMode.ChargeInstability, forcesFail: true);
-        Add(map, 142, "Capacity > 250% of rating", DiagnosticAxis.Capacity, FailureMode.None, isAdvisory: true);
+        Add(map, 142, "Discharge Timeout", DiagnosticAxis.ChargeAcceptance, FailureMode.ChargeInstability, forcesFail: true);
 
         return map;
     }
