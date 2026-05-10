@@ -134,12 +134,12 @@ internal static class CadexEventParser
         };
 
     /// <summary>
-    /// Derives a human-readable failure reason to display when event code 116
-    /// (Program Fail) is received.  Uses the <paramref name="lastEventCode"/>
-    /// (the event that preceded the 116) and its associated record to produce a
-    /// context-specific message such as "Ohm Test Failed (114 mΩ)".
+    /// Derives a human-readable failure reason to display for a terminal
+    /// failure or for the contextual event that explains a code 16 failure.
+    /// Uses <paramref name="lastEventCode"/> and its associated record to
+    /// produce a context-specific message such as "Ohm Test Failed (114 mΩ)".
     /// </summary>
-    /// <param name="lastEventCode">The most recent event code before 116.</param>
+    /// <param name="lastEventCode">The terminal or contextual event code.</param>
     /// <param name="lastRecord">The <see cref="CadexRecord"/> for that event.</param>
     /// <returns>A descriptive failure string, or <c>null</c> when no specific
     /// reason can be determined.</returns>
@@ -159,11 +159,6 @@ internal static class CadexEventParser
             _ when CadexCodeMap.TryGetDefinition(lastEventCode, out var definition)
                 => definition.Message,
 
-            // Legacy fallback mappings for historical codes not yet in causal map
-            33  => "User Programmed Timeout",
-            175 or 177 => "Battery Undercharged",
-            176 or 178 => "Battery Overcharged",
-
             _ => null,
         };
 
@@ -172,7 +167,7 @@ internal static class CadexEventParser
     /// the battery program and should trigger the failure-reason analysis.
     /// </summary>
     public static bool IsFailureCode(int eventCode) =>
-        eventCode is 116 or 16 or 175 or 176 or 177 or 178 or 179;
+        eventCode is 116 or 16 or 177 or 178 or 179;
 
     /// <summary>
     /// Returns <c>true</c> when the code is classified in the causal registry

@@ -157,7 +157,7 @@ public class StationStateManagerTests
     // ── Failure tracking ─────────────────────────────────────────────────
 
     [Fact]
-    public void ProcessLine_Code116_AfterCode27_SetsOhmTestFailureReason()
+    public void ProcessLine_Code116_AlwaysSetsTargetCapacityNotMet_EvenAfterOhmTest()
     {
         var mgr = new StationStateManager();
         // Event 27 (OhmTest) with 114 mΩ resistance
@@ -168,14 +168,11 @@ public class StationStateManagerTests
         mgr.ProcessLine(ohmLine);
         mgr.ProcessLine(failLine);
 
-        var state = mgr.GetState(1);
-        Assert.NotNull(state.FailureReason);
-        Assert.Contains("Ohm Test Failed", state.FailureReason);
-        Assert.Contains("114 mΩ", state.FailureReason);
+        Assert.Equal("Target Capacity Not Met", mgr.GetState(1).FailureReason);
     }
 
     [Fact]
-    public void ProcessLine_Code116_AfterCode144_SetsChargeTimeoutReason()
+    public void ProcessLine_Code116_AfterCode144_SetsTargetCapacityReason()
     {
         var mgr = new StationStateManager();
         var timeoutLine = @"0,1,""          "",""04/27/2026"",""143257"",144,""2\3943\0\26"",""89\87""";
@@ -184,7 +181,7 @@ public class StationStateManagerTests
         mgr.ProcessLine(timeoutLine);
         mgr.ProcessLine(failLine);
 
-        Assert.Equal("Charge Timeout", mgr.GetState(1).FailureReason);
+        Assert.Equal("Target Capacity Not Met", mgr.GetState(1).FailureReason);
     }
 
     [Fact]
@@ -201,7 +198,7 @@ public class StationStateManagerTests
     }
 
     [Fact]
-    public void ProcessLine_Code116_NoPrecedingCode_SetsGenericFailure()
+    public void ProcessLine_Code116_NoPrecedingCode_SetsTargetCapacityReason()
     {
         var mgr = new StationStateManager();
         // Send 116 with no preceding non-telemetry event
@@ -209,23 +206,22 @@ public class StationStateManagerTests
 
         mgr.ProcessLine(failLine);
 
-        Assert.Equal("Program Failed", mgr.GetState(1).FailureReason);
+        Assert.Equal("Target Capacity Not Met", mgr.GetState(1).FailureReason);
     }
 
     [Fact]
-    public void ProcessLine_Code116_AfterCode250Only_SetsGenericFailure()
+    public void ProcessLine_Code116_AfterCode250Only_SetsTargetCapacityReason()
     {
         var mgr = new StationStateManager();
         // Only normal telemetry before the failure
         mgr.ProcessLine(@"0,1,""          "",""04/24/2026"",""141900"",250,""2\3943\796\26"",""89\87""");
         mgr.ProcessLine(@"0,1,""          "",""04/27/2026"",""143300"",116,""2\3943\0\26"",""89\87""");
 
-        // 250 lines do not update LastActiveEventCode, so no preceding event is known
-        Assert.Equal("Program Failed", mgr.GetState(1).FailureReason);
+        Assert.Equal("Target Capacity Not Met", mgr.GetState(1).FailureReason);
     }
 
     [Fact]
-    public void ProcessLine_Code177_Without116_SetsBatteryUnderchargedReason()
+    public void ProcessLine_Code177_SetsUnderchargedFailureReason()
     {
         var mgr = new StationStateManager();
 
@@ -235,27 +231,27 @@ public class StationStateManagerTests
     }
 
     [Fact]
-    public void ProcessLine_Code175_Without116_SetsBatteryUnderchargedReason()
+    public void ProcessLine_Code175_DoesNotSetFailureReason()
     {
         var mgr = new StationStateManager();
 
         mgr.ProcessLine(@"0,1,""          "",""04/27/2026"",""143257"",175,""7\70"",""0""");
 
-        Assert.Equal("Battery Undercharged", mgr.GetState(1).FailureReason);
+        Assert.Null(mgr.GetState(1).FailureReason);
     }
 
     [Fact]
-    public void ProcessLine_Code176_Without116_SetsBatteryOverchargedReason()
+    public void ProcessLine_Code176_DoesNotSetFailureReason()
     {
         var mgr = new StationStateManager();
 
         mgr.ProcessLine(@"0,1,""          "",""04/27/2026"",""143257"",176,""7\70"",""0""");
 
-        Assert.Equal("Battery Overcharged", mgr.GetState(1).FailureReason);
+        Assert.Null(mgr.GetState(1).FailureReason);
     }
 
     [Fact]
-    public void ProcessLine_Code178_Without116_SetsBatteryOverchargedReason()
+    public void ProcessLine_Code178_SetsOverchargedFailureReason()
     {
         var mgr = new StationStateManager();
 
@@ -265,13 +261,14 @@ public class StationStateManagerTests
     }
 
     [Fact]
-    public void ProcessLine_Code179_Without116_SetsFailureReason()
+    public void ProcessLine_Code179_SetsUnableToLearnMatrixFailureReason()
     {
         var mgr = new StationStateManager();
 
         mgr.ProcessLine(@"0,1,""          "",""04/27/2026"",""143257"",179,""7\70"",""0""");
 
-        Assert.False(string.IsNullOrWhiteSpace(mgr.GetState(1).FailureReason));
+        Assert.NotNull(mgr.GetState(1).FailureReason);
+        Assert.Contains("Learn Matrix", mgr.GetState(1).FailureReason);
     }
 
     [Fact]
@@ -330,6 +327,57 @@ public class StationStateManagerTests
         mgr.ProcessLine(failLine);
 
         Assert.Equal("Battery Over Temperature", mgr.GetState(1).FailureReason);
+    }
+
+    [Fact]
+    public void ProcessLine_Code16_AfterCode27_SetsOhmTestFailureReason()
+    {
+        var mgr = new StationStateManager();
+        var ohmLine  = @"0,1,""          "",""04/27/2026"",""143257"",27,""7\70"",114";
+        var failLine = @"0,1,""          "",""04/27/2026"",""143300"",16,""7\70"",""0""";
+
+        mgr.ProcessLine(ohmLine);
+        mgr.ProcessLine(failLine);
+
+        Assert.NotNull(mgr.GetState(1).FailureReason);
+        Assert.Contains("Ohm Test Failed", mgr.GetState(1).FailureReason);
+        Assert.Contains("114 mΩ", mgr.GetState(1).FailureReason);
+    }
+
+    [Fact]
+    public void ProcessLine_Code16_NoPrecedingCode_SetsGenericFailure()
+    {
+        var mgr = new StationStateManager();
+
+        mgr.ProcessLine(@"0,1,""          "",""04/27/2026"",""143300"",16,""7\70"",""0""");
+
+        Assert.Equal("Program Failed", mgr.GetState(1).FailureReason);
+    }
+
+    [Fact]
+    public void ProcessLine_Code112_DoesNotBecomeSticky_Code16_UsesActiveContext()
+    {
+        var mgr = new StationStateManager();
+        var warnLine = @"0,1,""          "",""04/27/2026"",""143256"",112,""7\1419\-401\35"",""85\37""";
+        var failLine = @"0,1,""          "",""04/27/2026"",""143257"",16,""7\1419\-401\35"",""85\37""";
+
+        mgr.ProcessLine(warnLine);
+        Assert.Null(mgr.GetState(1).LastFaultEventCode);
+
+        mgr.ProcessLine(failLine);
+
+        Assert.Equal("Cell Mismatch", mgr.GetState(1).FailureReason);
+    }
+
+    [Fact]
+    public void ProcessLine_Code130_IsNotStickyFaultIndicator()
+    {
+        var mgr = new StationStateManager();
+        var advisoryLine = @"0,1,""          "",""04/27/2026"",""143255"",130,""2\3943\796\26"",""89\87""";
+
+        mgr.ProcessLine(advisoryLine);
+
+        Assert.Null(mgr.GetState(1).LastFaultEventCode);
     }
 
     [Fact]
@@ -500,9 +548,7 @@ public class StationStateManagerTests
 
         mgr.ProcessLine(failLine);
 
-        // Failure reason should NOT blame the OhmTest from the previous phase.
-        // With no fault indicator in the discharge phase, it falls back to generic.
-        Assert.Equal("Program Failed", mgr.GetState(1).FailureReason);
+        Assert.Equal("Target Capacity Not Met", mgr.GetState(1).FailureReason);
     }
 
     [Fact]

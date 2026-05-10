@@ -210,8 +210,8 @@ public class CadexEventParserTests
     [Theory]
     [InlineData(116, true)]
     [InlineData(16,  true)]
-    [InlineData(175, true)]
-    [InlineData(176, true)]
+    [InlineData(175, false)]
+    [InlineData(176, false)]
     [InlineData(177, true)]
     [InlineData(178, true)]
     [InlineData(179, true)]
@@ -227,9 +227,9 @@ public class CadexEventParserTests
     [InlineData(129, true)]  // Intermittent battery (forced fail)
     [InlineData(170, true)]  // Configuration fault (invalid test)
     [InlineData(14,  true)]
-    [InlineData(112, true)]
+    [InlineData(112, false)]
     [InlineData(113, true)]
-    [InlineData(130, true)]
+    [InlineData(130, false)]
     [InlineData(142, true)]
     [InlineData(146, true)]
     [InlineData(154, true)]
